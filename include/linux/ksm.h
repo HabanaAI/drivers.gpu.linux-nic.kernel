@@ -53,6 +53,8 @@ struct page *ksm_might_need_to_copy(struct page *page,
 
 void rmap_walk_ksm(struct page *page, struct rmap_walk_control *rwc);
 void folio_migrate_ksm(struct folio *newfolio, struct folio *folio);
+bool reuse_ksm_page(struct page *page,
+			struct vm_area_struct *vma, unsigned long address);
 
 #else  /* !CONFIG_KSM */
 
@@ -85,6 +87,11 @@ static inline void rmap_walk_ksm(struct page *page,
 
 static inline void folio_migrate_ksm(struct folio *newfolio, struct folio *old)
 {
+}
+static inline bool reuse_ksm_page(struct page *page,
+			struct vm_area_struct *vma, unsigned long address)
+{
+	return false;
 }
 #endif /* CONFIG_MMU */
 #endif /* !CONFIG_KSM */
