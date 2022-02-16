@@ -2542,28 +2542,38 @@ int total_mapcount(struct page *page)
  * need full accuracy to avoid breaking page pinning, because
  * page_trans_huge_mapcount() is slower than page_mapcount().
  */
-int page_trans_huge_mapcount(struct page *page)
+int page_trans_huge_mapcount(struct page *page, int *total_mapcount)
 {
-	int i, ret;
+	int i, ret, _total_mapcount, mapcount;
 
 	/* hugetlbfs shouldn't call it */
 	VM_BUG_ON_PAGE(PageHuge(page), page);
 
-	if (likely(!PageTransCompound(page)))
-		return atomic_read(&page->_mapcount) + 1;
+	if (likely(!PageTransCompound(page))) {
+		mapcount = atomic_read(&page->_mapcount) + 1;
+		if (total_mapcount)
+			*total_mapcount = mapcount;
+		return mapcount;
+	}
 
 	page = compound_head(page);
 
-	ret = 0;
+	_total_mapcount = ret = 0;
 	for (i = 0; i < thp_nr_pages(page); i++) {
-		int mapcount = atomic_read(&page[i]._mapcount) + 1;
+		mapcount = atomic_read(&page[i]._mapcount) + 1;
 		ret = max(ret, mapcount);
+		_total_mapcount += mapcount;
 	}
-
-	if (PageDoubleMap(page))
+	if (PageDoubleMap(page)) {
 		ret -= 1;
-
-	return ret + compound_mapcount(page);
+		_total_mapcount -= thp_nr_pages(page);
+	}
+	mapcount = compound_mapcount(page);
+	ret += mapcount;
+	_total_mapcount += mapcount;
+	if (total_mapcount)
+		*total_mapcount = _total_mapcount;
+	return ret;
 }
 
 /* Racy check whether the huge page can be split */
