@@ -78,7 +78,7 @@ void drm_prime_remove_buf_handle(struct drm_prime_file_private *prime_fpriv,
 				 uint32_t handle);
 
 /* drm_drv.c */
-struct drm_minor *drm_minor_acquire(unsigned int minor_id);
+struct drm_minor *drm_minor_acquire(unsigned int minor_id, bool is_accel_minor);
 void drm_minor_release(struct drm_minor *minor);
 
 /* drm_managed.c */
@@ -147,9 +147,12 @@ void drm_master_internal_release(struct drm_device *dev);
 
 /* drm_sysfs.c */
 extern struct class *drm_class;
+extern struct class *accel_class;
 
 int drm_sysfs_init(void);
 void drm_sysfs_destroy(void);
+int accel_sysfs_init(void);
+void accel_sysfs_destroy(void);
 struct device *drm_sysfs_minor_alloc(struct drm_minor *minor);
 int drm_sysfs_connector_add(struct drm_connector *connector);
 void drm_sysfs_connector_remove(struct drm_connector *connector);

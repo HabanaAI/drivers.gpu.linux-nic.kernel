@@ -389,29 +389,11 @@ static int drm_open_helper(struct file *filp, struct drm_minor *minor)
 	return 0;
 }
 
-/**
- * drm_open - open method for DRM file
- * @inode: device inode
- * @filp: file pointer.
- *
- * This function must be used by drivers as their &file_operations.open method.
- * It looks up the correct DRM device and instantiates all the per-file
- * resources for it. It also calls the &drm_driver.open driver callback.
- *
- * RETURNS:
- *
- * 0 on success or negative errno value on failure.
- */
-int drm_open(struct inode *inode, struct file *filp)
+static int __drm_open(struct inode *inode, struct file *filp, struct drm_minor *minor)
 {
 	struct drm_device *dev;
-	struct drm_minor *minor;
 	int retcode;
 	int need_setup = 0;
-
-	minor = drm_minor_acquire(iminor(inode));
-	if (IS_ERR(minor))
-		return PTR_ERR(minor);
 
 	dev = minor->dev;
 	if (drm_dev_needs_global_mutex(dev))
@@ -446,7 +428,56 @@ err_undo:
 	drm_minor_release(minor);
 	return retcode;
 }
+
+/**
+ * drm_open - open method for DRM file
+ * @inode: device inode
+ * @filp: file pointer.
+ *
+ * This function must be used by drivers as their &file_operations.open method.
+ * It looks up the correct DRM device and instantiates all the per-file
+ * resources for it. It also calls the &drm_driver.open driver callback.
+ *
+ * RETURNS:
+ *
+ * 0 on success or negative errno value on failure.
+ */
+int drm_open(struct inode *inode, struct file *filp)
+{
+	struct drm_minor *minor;
+
+	minor = drm_minor_acquire(iminor(inode), false);
+	if (IS_ERR(minor))
+		return PTR_ERR(minor);
+
+	return __drm_open(inode, filp, minor);
+}
 EXPORT_SYMBOL(drm_open);
+
+/**
+ * accel_open - open method for ACCEL file
+ * @inode: device inode
+ * @filp: file pointer.
+ *
+ * This function must be used by drivers as their &file_operations.open method.
+ * It looks up the correct ACCEL device and instantiates all the per-file
+ * resources for it. It also calls the &drm_driver.open driver callback.
+ *
+ * RETURNS:
+ *
+ * 0 on success or negative errno value on failure.
+ */
+int accel_open(struct inode *inode, struct file *filp)
+{
+	struct drm_minor *minor;
+
+	minor = drm_minor_acquire(iminor(inode), true);
+	if (IS_ERR(minor))
+		return PTR_ERR(minor);
+
+	return __drm_open(inode, filp, minor);
+}
+EXPORT_SYMBOL(accel_open);
 
 void drm_lastclose(struct drm_device * dev)
 {

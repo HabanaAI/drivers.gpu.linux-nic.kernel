@@ -51,11 +51,16 @@ static struct device_type drm_sysfs_device_minor = {
 	.name = "drm_minor"
 };
 
+static struct device_type accel_sysfs_device_minor = {
+	.name = "accel_minor"
+};
+
 static struct device_type drm_sysfs_device_connector = {
 	.name = "drm_connector",
 };
 
 struct class *drm_class;
+struct class *accel_class;
 
 #ifdef CONFIG_ACPI
 static bool drm_connector_acpi_bus_match(struct device *dev)
@@ -146,6 +151,57 @@ void drm_sysfs_destroy(void)
 static void drm_sysfs_release(struct device *dev)
 {
 	kfree(dev);
+}
+
+static char *accel_devnode(struct device *dev, umode_t *mode)
+{
+	return kasprintf(GFP_KERNEL, "accel/%s", dev_name(dev));
+}
+
+static CLASS_ATTR_STRING(accel_version, S_IRUGO, "accel 1.0.0 20221018");
+
+/**
+ * accel_sysfs_init - initialize sysfs helpers
+ *
+ * This is used to create the ACCEL class, which is the implicit parent of any
+ * other top-level ACCEL sysfs objects.
+ *
+ * You must call accel_sysfs_destroy() to release the allocated resources.
+ *
+ * Return: 0 on success, negative error code on failure.
+ */
+int accel_sysfs_init(void)
+{
+	int err;
+
+	accel_class = class_create(THIS_MODULE, "accel");
+	if (IS_ERR(accel_class))
+		return PTR_ERR(accel_class);
+
+	err = class_create_file(accel_class, &class_attr_accel_version.attr);
+	if (err) {
+		class_destroy(accel_class);
+		accel_class = NULL;
+		return err;
+	}
+
+	accel_class->devnode = accel_devnode;
+
+	return 0;
+}
+
+/**
+ * accel_sysfs_destroy - destroys ACCEL class
+ *
+ * Destroy the ACCEL device class.
+ */
+void accel_sysfs_destroy(void)
+{
+	if (IS_ERR_OR_NULL(accel_class))
+		return;
+	class_remove_file(accel_class, &class_attr_accel_version.attr);
+	class_destroy(accel_class);
+	accel_class = NULL;
 }
 
 /*
@@ -471,19 +527,28 @@ struct device *drm_sysfs_minor_alloc(struct drm_minor *minor)
 	struct device *kdev;
 	int r;
 
-	if (minor->type == DRM_MINOR_RENDER)
-		minor_str = "renderD%d";
-	else
-		minor_str = "card%d";
-
 	kdev = kzalloc(sizeof(*kdev), GFP_KERNEL);
 	if (!kdev)
 		return ERR_PTR(-ENOMEM);
 
 	device_initialize(kdev);
-	kdev->devt = MKDEV(DRM_MAJOR, minor->index);
-	kdev->class = drm_class;
-	kdev->type = &drm_sysfs_device_minor;
+
+	if (minor->type == DRM_MINOR_ACCEL) {
+		minor_str = "accel%d";
+		kdev->devt = MKDEV(ACCEL_MAJOR, minor->index);
+		kdev->class = accel_class;
+		kdev->type = &accel_sysfs_device_minor;
+	} else {
+		if (minor->type == DRM_MINOR_RENDER)
+			minor_str = "renderD%d";
+		else
+		 	minor_str = "card%d";
+
+		kdev->devt = MKDEV(DRM_MAJOR, minor->index);
+		kdev->class = drm_class;
+		kdev->type = &drm_sysfs_device_minor;
+	}
+
 	kdev->parent = minor->dev->dev;
 	kdev->release = drm_sysfs_release;
 	dev_set_drvdata(kdev, minor);
