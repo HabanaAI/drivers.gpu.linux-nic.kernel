@@ -8,3 +8,6 @@ accel-y := \
 	accel_drv.o
 
 obj-$(CONFIG_ACCEL)	+= accel.o
+
+obj-$(CONFIG_ACCEL_DUMMY)		+= dummy/
+
