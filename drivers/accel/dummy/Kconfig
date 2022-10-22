@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+menuconfig ACCEL_DUMMY
+	tristate "Drive for a dummy compute accelerator"
+	depends on ACCEL
+	help
+	  Just an example
