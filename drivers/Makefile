@@ -62,6 +62,9 @@ obj-y				+= iommu/
 # gpu/ comes after char for AGP vs DRM startup and after iommu
 obj-y				+= gpu/
 
+# accel is part of drm so it must come after gpu
+obj-$(CONFIG_DRM_ACCEL)		+= accel/
+
 obj-$(CONFIG_CONNECTOR)		+= connector/
 
 # i810fb and intelfb depend on char/agp/
