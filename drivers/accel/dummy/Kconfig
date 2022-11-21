@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+config ACCEL_DUMMY
+	tristate "Drive for a dummy compute accelerator"
+	depends on DRM_ACCEL
+	help
+	  An example of a compute accelerator driver that registers with drm
+	  as a compute accelerator.
+
+	  This driver does not actually do anything.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called accel_dummy.
