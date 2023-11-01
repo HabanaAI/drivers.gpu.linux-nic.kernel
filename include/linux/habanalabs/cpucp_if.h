@@ -123,6 +123,145 @@ struct hl_eq_pcie_drain_ind_data {
 	__le64 drain_rd_addr_hbw;
 };
 
+enum hl_eq_glbl_err_idx {
+	GLBL_ERR_IDX0,
+	GLBL_ERR_IDX1,
+	GLBL_ERR_MAX
+};
+
+/**
+ * struct hl_eq_glbl_err_reg_info - Global error register information
+ * @block_addr: 32-bit LBW block address where global error occurred
+ * @cause: Global error cause information
+ * @addr: Global error address information
+ * @pad: padding
+ */
+struct hl_eq_glbl_err_reg_info {
+	__le32 block_addr;
+	__le32 cause;
+	__le32 addr;
+	__u8 pad[4];
+};
+
+/**
+ * struct hl_eq_glbl_err - Global error information
+ * @num_valid_entries: number of valid entries in info array
+ * @pad: padding
+ * @info: Global error register information array
+ *
+ * Upon SPI and SEI events, FW will scan special blocks for
+ * global error occurred. FW will fill info array and update
+ * number of valid entries.
+ */
+struct hl_eq_glbl_err {
+	__u8 num_valid_entries;
+	__u8 pad[7];
+	struct hl_eq_glbl_err_reg_info info[GLBL_ERR_MAX];
+};
+
+/**
+ * struct hl_eq_razwi_regs - RAZWI register information
+ * @razwi_happened: flag to indicate RAZWI happened
+ * @pad: padding
+ * @hi_reg: 32 bit MSB register value
+ * @lo_reg: 32 bit LSB register value
+ * @id: RAZWI captured ID
+ */
+struct hl_eq_razwi_regs {
+	__u8 razwi_happened;
+	__u8 pad[3];
+	__le32 hi_reg;
+	__le32 lo_reg;
+	__le32 id;
+};
+
+/**
+ * struct hl_eq_razwi_block_info - RAZWI block information
+ * @rr_aw: RR_AW RAZWI register information
+ * @rr_ar: RR_AR RAZWI register information
+ * @adec_aw: ADEC_AW RAZWI register information
+ * @adec_ar: ADEC_AR RAZWI register information
+ */
+struct hl_eq_razwi_block_info {
+	struct hl_eq_razwi_regs rr_aw;
+	struct hl_eq_razwi_regs rr_ar;
+	struct hl_eq_razwi_regs adec_aw;
+	struct hl_eq_razwi_regs adec_ar;
+};
+
+/**
+ * struct hl_eq_razwi_mstr_if_reg_data - MSTR IF RAZWI register information
+ * @aw: MSTR IF AW RAZWI register information
+ * @ar: MSTR IF AR RAZWI register information
+ */
+struct hl_eq_razwi_mstr_if_reg_data {
+	struct hl_eq_razwi_regs aw;
+	struct hl_eq_razwi_regs ar;
+};
+
+/**
+ * struct hl_eq_razwi_mstr_if_block_data - MSTR IF RAZWI block information
+ * @lbw: MSTR IF RAZWI LBW information
+ * @hbw: MSTR IF RAZWI HBW information
+ */
+struct hl_eq_razwi_mstr_if_block_data {
+	struct hl_eq_razwi_mstr_if_reg_data lbw;
+	struct hl_eq_razwi_mstr_if_reg_data hbw;
+};
+
+/**
+ * struct hl_eq_razwi_xresp_data - MSTR IF XRESP information
+ * @lbw: LBW cause information
+ * @hbw: HBW cause information
+ */
+struct hl_eq_razwi_xresp_data {
+	struct hl_eq_intr_cause lbw;
+	struct hl_eq_intr_cause hbw;
+};
+
+/**
+ * struct hl_eq_razwi_mstr_if_data - RAZWI MSTR IF information
+ * @rr: RR RAZWI information
+ * @isec: ISEC RAZWI information
+ * @aw_dup_crdt: DUP credit AW RAZWI information
+ * @illegal_txn: Illegal TXN RAZWI information
+ * @xresp: Error response RAZWI information
+ */
+struct hl_eq_razwi_mstr_if_data {
+	struct hl_eq_razwi_mstr_if_block_data rr;
+	struct hl_eq_razwi_mstr_if_reg_data isec;
+	struct hl_eq_razwi_regs aw_dup_crdt;
+	struct hl_eq_razwi_mstr_if_block_data illegal_txn;
+	struct hl_eq_razwi_xresp_data xresp;
+};
+
+/**
+ * struct hl_eq_razwi_rtr_data - RAZWI RTR information
+ * @lbw: RAZWI LBW information
+ * @hbw: RAZWI HBW information
+ */
+struct hl_eq_razwi_rtr_data {
+	struct hl_eq_razwi_block_info lbw;
+	struct hl_eq_razwi_block_info hbw;
+};
+
+/**
+ * struct hl_eq_razwi_with_intr_cause_data - RAZWI information with interrupt cause
+ * @intr_cause: Interrupt cause information
+ * @rtr_data: RTR RAZWI LBW and HBW information
+ * @mstr_if_data: MSTR IF RAZWI information
+ * @glbl_err_data: Global error information
+ *
+ * This data structure will be used as part of hl_eq_dynamic_entry
+ * data structure.
+ */
+struct hl_eq_razwi_with_intr_cause_data {
+	struct hl_eq_intr_cause intr_cause;
+	struct hl_eq_razwi_rtr_data rtr_data;
+	struct hl_eq_razwi_mstr_if_data mstr_if_data;
+	struct hl_eq_glbl_err glbl_err_data;
+};
+
 struct hl_eq_razwi_lbw_info_regs {
 	__le32 rr_aw_razwi_reg;
 	__le32 rr_aw_razwi_id_reg;
@@ -364,6 +503,108 @@ struct hl_eq_addr_dec_intr_data {
 	__le64 addr[ADDR_DEC_ADDRESS_COUNT_MAX];
 	__u8 addr_cnt;
 	__u8 pad[7];
+};
+
+#define MAX_PORTS_PER_NIC	4
+
+/* NIC interrupt type */
+enum hl_nic_interrupt_type {
+	NIC_INTR_NONE = 0,
+	NIC_INTR_TMR = 1,
+	NIC_INTR_RXB_CORE_SPI,
+	NIC_INTR_RXB_CORE_SEI,
+	NIC_INTR_QPC_RESP_ERR,
+	NIC_INTR_RXE_SPI,
+	NIC_INTR_RXE_SEI,
+	NIC_INTR_TXS,
+	NIC_INTR_TXE,
+};
+
+struct hl_eq_nic_intr_cause {
+	__le32 intr_type; /* enum hl_nic_interrupt_type */
+	__le32 pad;
+	struct hl_eq_intr_cause intr_cause[MAX_PORTS_PER_NIC];
+};
+
+/* struct hl_eq_nic_sts_req_data is the data in hl_eq_dynamic_entry */
+struct hl_eq_nic_sts_req_data {
+	__le64 port_en_mask;	/* enabled ports 0-23 */
+	__u8 cmd;		/* 0 - one shot, 1 - periodic start, 2 - periodic stop */
+	__u8 period;		/* seconds */
+	__le16 reserved;
+	__le32 reserved2;
+};
+
+enum hl_pcie_sei_type {
+	PCIE_SEI_AXI_RESP_ERR,
+	PCIE_SEI_BUS_MSTR_EN_CLR
+};
+
+enum hl_eq_pcie_mstr_if {
+	PCIE_MSTR_RR_MSTR_IF,
+	PCIE_ELBI_RR_MSTR_IF,
+	PCIE_LBW_RR_MSTR_IF,
+	PCIE_PIF_ARC_MSTR_IF,
+	PCIE_MSTR_IF_MAX
+};
+
+struct hl_eq_pcie_sei_data {
+	__u8 sei_type; /* enum hl_pcie_sei_type */
+	__u8 pad[7];
+	struct hl_eq_intr_cause intr_cause; /* relevant only to PCIE_SEI_AXI_RESP_ERR */
+	struct hl_eq_razwi_rtr_data rtr_data;
+	struct hl_eq_razwi_mstr_if_data mstr_if_data[PCIE_MSTR_IF_MAX];
+	struct hl_eq_glbl_err glbl_err_data;
+};
+
+enum hl_nic_spi_type {
+	NIC_SPI_BMON_SPMU,
+	NIC_SPI_SW_ERROR
+};
+
+/**
+ * struct hl_eq_nic_spi_data - NIC SPI event information
+ * @spi_type: NIC spi type
+ * @qpc_cause: QPC cause information
+ * @rxb_core_cause: RXB CORE cause information
+ * @rxe_cause_0: RXE cause information in first register
+ * @rxe_cause_1: RXE cause information in second register
+ */
+struct hl_eq_nic_spi_data {
+	__u8 spi_type; /* enum hl_nic_spi_type */
+	__u8 pad[7];
+	struct hl_eq_intr_cause qpc_cause;
+	struct hl_eq_intr_cause rxb_core_cause;
+	struct hl_eq_intr_cause rxe_cause_0;
+	struct hl_eq_intr_cause rxe_cause_1;
+};
+
+enum hl_eq_nic_mstr_if {
+	NIC_MSTR_IF_CTRL,
+	NIC_MSTR_IF_DATA,
+	NIC_MSTR_IF_MAX
+};
+
+/**
+ * struct hl_eq_nic_sei_data - NIC SEI event information
+ * @rxb_core_cause: RXB CORE cause information
+ * @rxe_cause: RXE cause information
+ * @txe_cause: TXE cause information
+ * @txs_cause: TXS cause information
+ * @tmr_cause: TMR cause information
+ * @qpc_cause: QPC cause information
+ * @mstr_if_data: MSTR IF RAZWI information
+ * @glbl_err_data: Global error information
+ */
+struct hl_eq_nic_sei_data {
+	struct hl_eq_intr_cause rxb_core_cause;
+	struct hl_eq_intr_cause rxe_cause;
+	struct hl_eq_intr_cause txe_cause;
+	struct hl_eq_intr_cause txs_cause;
+	struct hl_eq_intr_cause tmr_cause;
+	struct hl_eq_intr_cause qpc_cause;
+	struct hl_eq_razwi_mstr_if_data mstr_if_data[NIC_MSTR_IF_MAX];
+	struct hl_eq_glbl_err glbl_err_data;
 };
 
 struct hl_eq_entry {
@@ -659,6 +900,9 @@ enum pq_init_status {
  *       number (nonce) provided by the host to prevent replay attacks.
  *       public key and certificate also provided as part of the FW response.
  *
+ * CPUCP_PACKET_NIC_SET_CHECKERS -
+ *       Packet to set a specific NIC checker bit.
+ *
  * CPUCP_PACKET_MONITOR_DUMP_GET -
  *       Get monitors registers dump from the CpuCP kernel.
  *       The CPU will put the registers dump in the a buffer allocated by the driver
@@ -666,6 +910,14 @@ enum pq_init_status {
  *       passes the max size it allows the CpuCP to write to the structure, to prevent
  *       data corruption in case of mismatched driver/FW versions.
  *       Obsolete.
+ *
+ * CPUCP_PACKET_NIC_WQE_ASID_SET -
+ *       Packet to set nic wqe asid as the registers needed are privilege and to be configured by FW
+ *
+ * CPUCP_PACKET_NIC_ECC_INTRS_UNMASK -
+ *       Packet to unmask NIC memory registers which are masked at preboot stage. As per the Arch
+ *       team recommendation, NIC memory ECC errors should be unmasked after NIC driver is up and
+ *       running
  *
  * CPUCP_PACKET_GENERIC_PASSTHROUGH -
  *       Generic opcode for all firmware info that is only passed to host
@@ -675,12 +927,28 @@ enum pq_init_status {
  *       LKD sends FW indication whether device is free or in use, this indication is reported
  *       also to the BMC.
  *
+ * CPUCP_PACKET_NIC_MAC_TX_RESET -
+ *       Packet to reset the NIC MAC Tx.
+ *
+ * CPUCP_PACKET_NIC_WQE_ASID_UNSET -
+ *       Packet to unset nic wqe asid as the registers needed are privilege and to be configured
+ *       by FW.
+ *
  * CPUCP_PACKET_SOFT_RESET -
  *       Packet to perform soft-reset.
  *
  * CPUCP_PACKET_INTS_REGISTER -
  *       Packet to inform FW that queues have been established and LKD is ready to receive
  *       EQ events.
+ *
+ * CPUCP_PACKET_NIC_INIT_TXS_MEM -
+ *      Init TXS related memory in HBM.
+ *
+ * CPUCP_PACKET_NIC_INIT_TMR_MEM -
+ *      Init HW timer related memory in HBM.
+ *
+ * CPUCP_PACKET_NIC_CLR_MEM -
+ *      Clear NIC related memory in HBM.
  */
 
 enum cpucp_packet_id {
@@ -734,21 +1002,24 @@ enum cpucp_packet_id {
 	CPUCP_PACKET_RESERVED2,			/* not used */
 	CPUCP_PACKET_SEC_ATTEST_GET,		/* internal */
 	CPUCP_PACKET_RESERVED3,			/* not used */
-	CPUCP_PACKET_RESERVED4,			/* not used */
+	CPUCP_PACKET_NIC_SET_CHECKERS,		/* internal */
 	CPUCP_PACKET_MONITOR_DUMP_GET,		/* debugfs */
-	CPUCP_PACKET_RESERVED5,			/* not used */
-	CPUCP_PACKET_RESERVED6,			/* not used */
-	CPUCP_PACKET_RESERVED7,			/* not used */
+	CPUCP_PACKET_RESERVED4,			/* not used */
+	CPUCP_PACKET_NIC_WQE_ASID_SET,		/* internal */
+	CPUCP_PACKET_NIC_ECC_INTRS_UNMASK,	/* internal */
 	CPUCP_PACKET_GENERIC_PASSTHROUGH,	/* IOCTL */
-	CPUCP_PACKET_RESERVED8,			/* not used */
+	CPUCP_PACKET_RESERVED5,			/* not used */
 	CPUCP_PACKET_ACTIVE_STATUS_SET,		/* internal */
-	CPUCP_PACKET_RESERVED9,			/* not used */
-	CPUCP_PACKET_RESERVED10,		/* not used */
-	CPUCP_PACKET_RESERVED11,		/* not used */
-	CPUCP_PACKET_RESERVED12,		/* internal */
-	CPUCP_PACKET_RESERVED13,                /* internal */
+	CPUCP_PACKET_NIC_MAC_TX_RESET,		/* internal */
+	CPUCP_PACKET_RESERVED6,			/* not used */
+	CPUCP_PACKET_NIC_WQE_ASID_UNSET,	/* internal */
+	CPUCP_PACKET_RESERVED7,			/* not used */
+	CPUCP_PACKET_RESERVED8,			/* not used */
 	CPUCP_PACKET_SOFT_RESET,		/* internal */
 	CPUCP_PACKET_INTS_REGISTER,		/* internal */
+	CPUCP_PACKET_NIC_INIT_TXS_MEM,		/* internal */
+	CPUCP_PACKET_NIC_INIT_TMR_MEM,		/* internal */
+	CPUCP_PACKET_NIC_CLR_MEM,		/* internal */
 	CPUCP_PACKET_ID_MAX			/* must be last */
 };
 
@@ -855,6 +1126,9 @@ struct cpucp_packet {
 	union {
 		/* For NIC requests */
 		__le32 port_index;
+
+		/* For NIC requests */
+		__le32 macro_index;
 
 		/* For Generic packet sub index */
 		__le32 pkt_subidx;
@@ -1050,6 +1324,21 @@ enum pvt_index {
 	PVT_SE,
 	PVT_NW,
 	PVT_NE
+};
+
+#define NIC_CHECKERS_TYPE_SHIFT		0
+#define NIC_CHECKERS_TYPE_MASK		0xFFFF
+#define NIC_CHECKERS_CHECK_SHIFT	16
+#define NIC_CHECKERS_CHECK_MASK		0x1
+#define NIC_CHECKERS_DROP_SHIFT		17
+#define NIC_CHECKERS_DROP_MASK		0x1
+
+enum nic_checkers_types {
+	RX_PKT_BAD_FORMAT = 0,
+	RX_INV_OPCODE,
+	RX_INV_SYNDROME,
+	RX_WQE_IDX_MISMATCH,
+	TX_WQE_IDX_MISMATCH = 0x80
 };
 
 /* Event Queue Packets */
@@ -1267,6 +1556,7 @@ struct ser_val {
  * @post_fec_ser: post FEC SER value.
  * @throughput: measured throughput.
  * @latency: measured latency.
+ * @port_toggle_cnt: counts how many times the link toggled since last port PHY init.
  */
 struct cpucp_nic_status {
 	__le32 port;
@@ -1286,6 +1576,8 @@ struct cpucp_nic_status {
 	struct ser_val post_fec_ser;
 	struct frac_val bandwidth;
 	struct frac_val lat;
+	__le32 port_toggle_cnt;
+	__u8 reserved[4];
 };
 
 enum cpucp_hbm_row_replace_cause {
@@ -1412,6 +1704,38 @@ struct cpucp_monitor_dump {
  */
 enum hl_passthrough_type {
 	HL_PASSTHROUGH_VERSIONS,
+};
+
+/* structure cpucp_cn_init_hw_mem_packet - used for initializing the assoicated CN(Core NIC)
+ * hw(TIMER, TX-SCHEDQ) memory in HBM using the provided parameters.
+ * @cpucp_pkt: basic cpucp packet, the rest of the parameters extend the packet.
+ * @mem_base_addr: base address of the assoicated memory
+ * @num_entries: number of entries.
+ * @entry_size: size of entry.
+ * @granularity: base value for first element.
+ * @pad: padding
+ */
+struct cpucp_cn_init_hw_mem_packet {
+	struct cpucp_packet cpucp_pkt;
+	__le64 mem_base_addr;
+	__le16 num_entries;
+	__le16 entry_size;
+	__le16 granularity;
+	__u8 pad[2];
+};
+
+/* structure cpucp_cn_clear_mem_packet - used for clearing the assoicated CN(Core NIC)
+ * memory in HBM using the provided parameters.
+ * @cpucp_pkt: basic cpucp packet, the rest of the parameters extend the packet.
+ * @mem_base_addr: base address of the assoicated memory
+ * @size: size in bytes of the assoicated memory.
+ * @pad: padding
+ */
+struct cpucp_cn_clear_mem_packet {
+	struct cpucp_packet cpucp_pkt;
+	__le64 mem_base_addr;
+	__le32 size;
+	__u8 pad[4];
 };
 
 #endif /* CPUCP_IF_H */

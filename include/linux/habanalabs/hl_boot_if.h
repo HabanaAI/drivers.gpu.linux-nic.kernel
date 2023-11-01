@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0
  *
- * Copyright 2018-2020 HabanaLabs, Ltd.
+ * Copyright 2018-2023 HabanaLabs, Ltd.
  * All Rights Reserved.
  *
  */
@@ -194,6 +194,7 @@ enum cpu_boot_dev_sts {
 	CPU_BOOT_DEV_STS_FW_NIC_STAT_EXT_EN = 24,
 	CPU_BOOT_DEV_STS_IS_IDLE_CHECK_EN = 25,
 	CPU_BOOT_DEV_STS_MAP_HWMON_EN = 26,
+	CPU_BOOT_DEV_STS_NIC_MEM_CLEAR_EN = 27,
 	CPU_BOOT_DEV_STS_ENABLED = 31,
 	CPU_BOOT_DEV_STS_SCND_EN = 63,
 	CPU_BOOT_DEV_STS_LAST = 64 /* we have 2 registers of 32 bits */
@@ -331,6 +332,11 @@ enum cpu_boot_dev_sts {
  *					HWMON enum mapping to cpucp enums.
  *					Initialized in: linux
  *
+ * CPU_BOOT_DEV_STS0_NIC_MEM_CLEAR_EN
+ *					If set, means f/w supports nic hbm memory clear and
+ *					tmr,txs hbm memory init.
+ *					Initialized in: zephyr-mgmt
+ *
  * CPU_BOOT_DEV_STS0_ENABLED		Device status register enabled.
  *					This is a main indication that the
  *					running FW populates the device status
@@ -367,6 +373,7 @@ enum cpu_boot_dev_sts {
 #define CPU_BOOT_DEV_STS0_FW_NIC_STAT_EXT_EN	(1 << CPU_BOOT_DEV_STS_FW_NIC_STAT_EXT_EN)
 #define CPU_BOOT_DEV_STS0_IS_IDLE_CHECK_EN	(1 << CPU_BOOT_DEV_STS_IS_IDLE_CHECK_EN)
 #define CPU_BOOT_DEV_STS0_MAP_HWMON_EN		(1 << CPU_BOOT_DEV_STS_MAP_HWMON_EN)
+#define CPU_BOOT_DEV_STS0_NIC_MEM_CLEAR_EN	(1 << CPU_BOOT_DEV_STS_NIC_MEM_CLEAR_EN)
 #define CPU_BOOT_DEV_STS0_ENABLED		(1 << CPU_BOOT_DEV_STS_ENABLED)
 #define CPU_BOOT_DEV_STS1_ENABLED		(1 << CPU_BOOT_DEV_STS_ENABLED)
 
