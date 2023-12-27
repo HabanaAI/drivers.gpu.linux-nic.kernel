@@ -10,9 +10,7 @@
 
 #include <linux/irqreturn.h>
 #include <linux/habanalabs/cpucp_if.h>
-#ifdef _HAS_AUX_BUS_H
 #include <linux/auxiliary_bus.h>
-#endif
 #include <linux/if_vlan.h>
 #include <uapi/linux/ethtool.h>
 
@@ -86,9 +84,7 @@ enum gaudi3_setup_type {
  * @type: type of the auxiliary device.
  */
 struct hl_aux_dev {
-#ifdef _HAS_AUX_BUS_H
 	struct auxiliary_device adev;
-#endif
 	void *aux_ops;
 	void *aux_data;
 	void *priv;
