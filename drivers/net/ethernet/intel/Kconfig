@@ -370,4 +370,21 @@ config IDPF
 	  To compile this driver as a module, choose M here. The module
 	  will be called idpf.
 
+config HABANA_CN
+	tristate "HabanaLabs (an Intel Company) Core NIC driver"
+	select AUXILIARY_BUS
+	default n
+	help
+	  This driver enables the infrastructure for network functionality that
+	  is part of the GAUDI ASIC family of AI Accelerators.
+	  The network interfaces are mainly used for scaling-out the training of
+	  AI Neural Networks through ROCEv2 protocol.
+	  In addition, the interfaces can also provide a standard Ethernet
+	  interface, mainly used for low-bandwidth control path and to enable
+	  the use of standard Ethernet tools (e.g. ethtool) to change
+	  configuration and retrieve statistics of those interfaces.
+
+	  To compile this driver as a module, choose M here. The module
+	  will be called habanalabs_cn.
+
 endif # NET_VENDOR_INTEL

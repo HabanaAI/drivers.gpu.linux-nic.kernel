@@ -1,0 +1,381 @@
+// SPDX-License-Identifier: GPL-2.0
+
+/* Copyright 2021-2022 HabanaLabs, Ltd.
+ * All Rights Reserved.
+ *
+ */
+
+#define pr_fmt(fmt)		"habanalabs_cn: " fmt
+
+#include "habanalabs_cn.h"
+#include <linux/version.h>
+
+#include <linux/module.h>
+#include <linux/auxiliary_bus.h>
+#include <linux/sched/clock.h>
+
+#define CREATE_TRACE_POINTS
+#include <trace/events/habanalabs_cn.h>
+
+#define HL_DRIVER_AUTHOR	"HabanaLabs Kernel Driver Team"
+
+#define HL_DRIVER_DESC		"Habanalabs AI accelerators network shared interface"
+
+#define HL_MODULE_VERSION	__stringify(HL_DRIVER_MAJOR) "."\
+				__stringify(HL_DRIVER_MINOR) "."\
+				__stringify(HL_DRIVER_PATCHLEVEL) "-"\
+				__stringify(HL_DRIVER_GIT_SHA)
+
+MODULE_AUTHOR(HL_DRIVER_AUTHOR);
+MODULE_DESCRIPTION(HL_DRIVER_DESC);
+MODULE_LICENSE("GPL v2");
+MODULE_VERSION(HL_MODULE_VERSION);
+
+/* QP drain time in seconds */
+#define HL_CN_QP_DRAIN_TIME		5
+
+#define HL_CN_EVENT_FILE_MAX_NAME_LEN	128
+#define HL_CN_EVENTS_DIR		"/sys/kernel/debug/tracing/events/habanalabs_cn"
+
+static int poll_enable = 1;
+static uint qp_drain_time = HL_CN_QP_DRAIN_TIME;
+static ulong enable_events_tracing;
+
+static bool poll_enable_param_was_set;
+
+static int poll_enable_param_set(const char *val, const struct kernel_param *kp)
+{
+	int rc = param_set_int(val, kp);
+
+	if (!rc)
+		poll_enable_param_was_set = true;
+
+	return rc;
+}
+
+static const struct kernel_param_ops poll_enable_cb_ops = {
+	.set = poll_enable_param_set,
+	.get = param_get_int,
+};
+
+module_param_cb(poll_enable, &poll_enable_cb_ops, &poll_enable, 0444);
+MODULE_PARM_DESC(poll_enable,
+		 "Enable driver in polling mode rather than IRQ (0 = no, 1 = yes, default yes)");
+
+module_param(qp_drain_time, uint, 0444);
+MODULE_PARM_DESC(qp_drain_time, "QP drain time in seconds after QP invalidation (default 2 Sec)");
+
+module_param(enable_events_tracing, ulong, 0444);
+MODULE_PARM_DESC(enable_events_tracing,
+		 "Bitmask for enable various events tracing indication (values in HL_CN_TRACE_*_MASK definitions, default 0)");
+
+static char *hl_cn_events[HL_CN_TRACE_NUM_EVENTS] __initdata = {
+	[HL_CN_TRACE_MEM_ALLOC] = "habanalabs_cn_mem_alloc",
+	[HL_CN_TRACE_MEM_DESTROY] = "habanalabs_cn_mem_destroy",
+};
+
+static char hl_cn_event_filename_buffer[HL_CN_EVENT_FILE_MAX_NAME_LEN] __initdata;
+
+static long __init hl_cn_enable_trace_event(const char *fpath)
+{
+	struct file *filp;
+	ssize_t n, nr;
+	loff_t pos;
+	long rc = 0;
+
+	filp = filp_open(fpath, O_RDWR, 0);
+	if (IS_ERR(filp)) {
+		rc = PTR_ERR(filp);
+		pr_err("habanalabs_cn: trace file %s open error %ld\n", fpath, rc);
+		return rc;
+	}
+
+	pos = filp->f_pos;
+
+	/* expected to write single char */
+	nr = 1;
+
+	n = kernel_write(filp, "1", nr, &pos);
+
+	if (n != nr) {
+		pr_err("habanalabs_cn: trace file write error %ld\n", (long)n);
+		rc = -EFAULT;
+	}
+
+	filp_close(filp, NULL);
+
+	return rc;
+}
+
+static void hl_cn_trace_print_sync_timestamp(void)
+{
+	u64 ts_nsec, ts_sec;
+
+	ts_nsec = sched_clock();
+	ts_sec = ts_nsec / 1000000000;
+	ts_nsec %= 1000000000;
+
+	pr_info("habanalabs_cn: sync trace timestamp %llu.%llu\n", ts_sec, ts_nsec);
+}
+
+static void __init hl_cn_enable_trace_events(void)
+{
+	int i, dir_namelen;
+
+	if (!enable_events_tracing)
+		return;
+
+	hl_cn_trace_print_sync_timestamp();
+
+	if ((enable_events_tracing & HL_CN_TRACE_ALL_EVENTS_MASK) ==
+	    HL_CN_TRACE_ALL_EVENTS_MASK) {
+		hl_cn_enable_trace_event(HL_CN_EVENTS_DIR "/enable");
+		return;
+	}
+
+	dir_namelen = snprintf(hl_cn_event_filename_buffer, HL_CN_EVENT_FILE_MAX_NAME_LEN,
+			       "%s/", HL_CN_EVENTS_DIR);
+	if (dir_namelen < 0 || dir_namelen >= HL_CN_EVENT_FILE_MAX_NAME_LEN) {
+		pr_err("failed to snprintf hl_cn trace dir %d\n", dir_namelen);
+		return;
+	}
+
+	for (i = 0; i < HL_CN_TRACE_NUM_EVENTS; i++) {
+		int tracefile_len = HL_CN_EVENT_FILE_MAX_NAME_LEN - dir_namelen;
+		long rc;
+
+		if (!(enable_events_tracing & BIT_ULL(i)))
+			continue;
+
+		rc = snprintf(&hl_cn_event_filename_buffer[dir_namelen], tracefile_len,
+			      "%s/enable", hl_cn_events[i]);
+
+		if (rc < 0 || rc >= tracefile_len) {
+			pr_err("failed to snprintf hl_cn trace file %s %ld\n",
+			       hl_cn_events[i], rc);
+			return;
+		}
+
+		rc = hl_cn_enable_trace_event(hl_cn_event_filename_buffer);
+		if (rc)
+			return;
+	}
+}
+
+static int hdev_init(struct hl_aux_dev *aux_dev)
+{
+	struct hl_cn_aux_data *aux_data = aux_dev->aux_data;
+	struct hl_cn_device *hdev;
+	int rc;
+
+	hdev = kzalloc(sizeof(*hdev), GFP_KERNEL);
+	if (!hdev)
+		return -ENOMEM;
+
+	hdev->cpucp_info = kzalloc(sizeof(*hdev->cpucp_info), GFP_KERNEL);
+	if (!hdev->cpucp_info) {
+		rc = -ENOMEM;
+		goto free_hdev;
+	}
+
+	aux_dev->priv = hdev;
+	hdev->cn_aux_dev = aux_dev;
+	hdev->pdev = aux_data->pdev;
+	hdev->dev = aux_data->dev;
+	hdev->asic_type = aux_data->asic_type;
+	hdev->vendor_id = aux_data->vendor_id;
+	hdev->pci_id = aux_data->pci_id;
+	hdev->pending_reset_long_timeout = aux_data->pending_reset_long_timeout;
+	hdev->pldm = aux_data->pldm;
+	hdev->skip_phy_init = aux_data->skip_phy_init;
+	hdev->load_phy_fw = aux_data->load_phy_fw;
+	hdev->cpucp_fw = aux_data->cpucp_fw;
+	hdev->supports_coresight = aux_data->supports_coresight;
+	hdev->use_fw_serdes_info = aux_data->use_fw_serdes_info;
+	hdev->fw_ver = aux_data->fw_ver;
+	hdev->driver_ver = aux_data->driver_ver;
+	hdev->minor = aux_data->minor;
+	hdev->id = aux_data->id;
+	hdev->dram_size = aux_data->dram_size;
+	hdev->ports_mask = aux_data->ports_mask;
+	hdev->ext_ports_mask = aux_data->ext_ports_mask;
+	hdev->phys_auto_neg_mask = aux_data->auto_neg_mask;
+	hdev->cache_line_size = aux_data->cache_line_size;
+	hdev->kernel_asid = aux_data->kernel_asid;
+	hdev->qp_drain_time = qp_drain_time;
+	hdev->card_location = aux_data->card_location;
+	hdev->mmu_enable = aux_data->mmu_enable;
+	hdev->lanes_per_port = aux_data->lanes_per_port;
+	hdev->mmap_type_flag = aux_data->mmap_type_flag;
+	hdev->device_timeout = aux_data->device_timeout;
+	hdev->fw_major_version = aux_data->fw_major_version;
+	hdev->fw_minor_version = aux_data->fw_minor_version;
+	hdev->fw_app_cpu_boot_dev_sts0 = aux_data->fw_app_cpu_boot_dev_sts0;
+	hdev->fw_app_cpu_boot_dev_sts1 = aux_data->fw_app_cpu_boot_dev_sts1;
+	hdev->cpucp_checkers_shift = aux_data->cpucp_checkers_shift;
+	hdev->num_of_dies = aux_data->num_of_dies;
+	hdev->accumulate_fec_duration = ACCUMULATE_FEC_STATS_DURATION_MS;
+
+	/* Gaudi uses polling mode by default. */
+	hdev->poll_enable = (!poll_enable_param_was_set && hdev->asic_type != HL_ASIC_GAUDI) ?
+			    false : poll_enable;
+
+	hdev->dram_enable = aux_data->dram_enable;
+	hdev->gaudi2_setup_type = aux_data->gaudi2_setup_type;
+	hdev->gaudi3_setup_type = aux_data->gaudi3_setup_type;
+
+	mutex_init(&hdev->hw_access_lock);
+
+	return 0;
+
+free_hdev:
+	kfree(hdev);
+	return rc;
+}
+
+static void hdev_fini(struct hl_aux_dev *aux_dev)
+{
+	struct hl_cn_device *hdev = aux_dev->priv;
+
+	mutex_destroy(&hdev->hw_access_lock);
+
+	kfree(hdev->cpucp_info);
+	kfree(hdev);
+	aux_dev->priv = NULL;
+}
+
+static const struct auxiliary_device_id hl_cn_id_table[] = {
+	{ .name = "habanalabs.cn", },
+	{ .name = "xe.cn", },
+	{},
+};
+
+MODULE_DEVICE_TABLE(auxiliary, hl_cn_id_table);
+
+static int hl_cn_probe(struct auxiliary_device *adev, const struct auxiliary_device_id *id)
+{
+	struct hl_aux_dev *aux_dev = container_of(adev, struct hl_aux_dev, adev);
+	struct hl_cn_aux_ops *aux_ops = aux_dev->aux_ops;
+	struct hl_cn_device *hdev;
+	ktime_t timeout;
+	int rc;
+
+	rc = hdev_init(aux_dev);
+	if (rc) {
+		dev_err(&aux_dev->adev.dev, "Failed to init hdev\n");
+		return -EIO;
+	}
+
+	hdev = aux_dev->priv;
+
+	/* don't allow module unloading while it is attached */
+	if (!try_module_get(THIS_MODULE)) {
+		dev_err(hdev->dev, "Failed to increment %s module refcount\n", HL_CN_NAME);
+		rc = -EIO;
+		goto module_get_err;
+	}
+
+	timeout = ktime_add_ms(ktime_get(), hdev->pending_reset_long_timeout * MSEC_PER_SEC);
+	while (1) {
+		aux_ops->hw_access_lock(aux_dev);
+
+		/* if the device is operational, proceed to actual init while holding the lock in
+		 * order to prevent concurrent hard reset
+		 */
+		if (aux_ops->device_operational(aux_dev))
+			break;
+
+		aux_ops->hw_access_unlock(aux_dev);
+
+		if (ktime_compare(ktime_get(), timeout) > 0) {
+			dev_err(hdev->dev, "Timeout while waiting for hard reset to finish\n");
+			rc = -EBUSY;
+			goto timeout_err;
+		}
+
+		dev_notice_once(hdev->dev, "Waiting for hard reset to finish before probing CN\n");
+
+		msleep_interruptible(MSEC_PER_SEC);
+	}
+
+	rc = hl_cn_dev_init(hdev);
+	if (rc) {
+		dev_err(hdev->dev, "Failed to init CN device\n");
+		goto dev_init_err;
+	}
+
+	aux_ops->hw_access_unlock(aux_dev);
+
+	return 0;
+
+dev_init_err:
+	aux_ops->hw_access_unlock(aux_dev);
+timeout_err:
+	module_put(THIS_MODULE);
+module_get_err:
+	hdev_fini(aux_dev);
+
+	return rc;
+}
+
+/* This function can be called only from the compute driver when deleting the aux bus, because we
+ * incremented the module refcount on probing. Hence no need to protect here from hard reset.
+ */
+static void hl_cn_remove(struct auxiliary_device *adev)
+{
+	struct hl_aux_dev *aux_dev = container_of(adev, struct hl_aux_dev, adev);
+	struct hl_cn_device *hdev = aux_dev->priv;
+
+	if (!hdev)
+		return;
+
+	hl_cn_dev_fini(hdev);
+
+	/* allow module unloading as now it is detached */
+	module_put(THIS_MODULE);
+
+	hdev_fini(aux_dev);
+}
+
+static struct auxiliary_driver hl_cn_driver = {
+	.name = "cn",
+	.probe = hl_cn_probe,
+	.remove = hl_cn_remove,
+	.id_table = hl_cn_id_table,
+};
+
+static int __init hl_cn_init(void)
+{
+	int rc;
+
+	pr_info("loading driver, version: %s\n", HL_MODULE_VERSION);
+
+	hl_cn_debugfs_init();
+
+	hl_cn_enable_trace_events();
+
+	rc = auxiliary_driver_register(&hl_cn_driver);
+	if (rc) {
+		pr_err("Failed to register auxiliary driver\n");
+		goto remove_debugfs;
+	}
+
+	return 0;
+
+remove_debugfs:
+	hl_cn_debugfs_fini();
+
+	return rc;
+}
+
+static void __exit hl_cn_exit(void)
+{
+	auxiliary_driver_unregister(&hl_cn_driver);
+
+	hl_cn_debugfs_fini();
+
+	pr_info("driver removed\n");
+}
+
+module_init(hl_cn_init);
+module_exit(hl_cn_exit);
