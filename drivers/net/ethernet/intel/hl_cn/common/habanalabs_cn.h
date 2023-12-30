@@ -754,21 +754,20 @@ struct hl_cn_mem_data {
 
 /**
  * struct hl_cni_user_cq_set_in_params - user CQ configuration in params.
- * @addr: CQ buffer address, relevant for Gaudi only.
+ * @reserved: Reserved.
  * @port: port index.
  * @num_of_cqes: Number of CQ entries in the buffer.
- * @id: CQ ID, relevant for Gaudi2 or higher.
+ * @id: CQ ID.
  */
 struct hl_cni_user_cq_set_in_params {
-	u64 addr;
+	u64 reserved;
 	u32 port;
 	u32 num_of_cqes;
 	u32 id;
 };
 
 /**
- * struct hl_cni_user_cq_set_in_params - user CQ configuration out params, relevant for Gaudi2 or
- *                                       higher.
+ * struct hl_cni_user_cq_set_in_params - user CQ configuration out params.
  * @mem_handle: Handle of CQ memory buffer.
  * @pi_handle: Handle of CQ producer-inder memory buffer.
  * @regs_handle: Handle of CQ Registers base-address.
@@ -783,10 +782,8 @@ struct hl_cni_user_cq_set_out_params {
 
 /**
  * struct hl_cni_user_cq_set_in_params - user CQ unconfiguration in params.
- * @addr: CQ buffer address, relevant for Gaudi only.
  * @port: port index.
- * @num_of_cqes: Number of CQ entries in the buffer.
- * @id: CQ ID, relevant for Gaudi2 or higher.
+ * @id: CQ ID.
  */
 struct hl_cni_user_cq_unset_in_params {
 	u32 port;
@@ -1166,8 +1163,8 @@ struct hl_cn_macro {
  * @auto_neg_skipped: true if Autonegotiation was skipped for this port, false otherwise.
  * @eth_enable: is Ethernet traffic enabled in addition to RDMA.
  * @ccq_enable: true if the CCQ was initialized successfully for this port, false otherwise.
- * @set_app_params: set_app_params operation was executed by the user. This is mandatory step for
- *                  Gaudi and above in order to initialize the uAPI.
+ * @set_app_params: set_app_params operation was executed by the user. This is mandatory step in
+ *                  order to initialize the uAPI.
  * @disabled: true if this port is disabled, i.e. need to block its initialization, false otherwise.
  * @bp_enable: true if WQ back-pressure was enabled, false otherwise.
  * @eq_handler_enable: true if event queue events are handled, false otherwise.
@@ -1291,7 +1288,7 @@ struct hl_cn_ctx {
  * @sb_base_addr: the base address of a Tx eth pkt cyclic buffer
  * @sb_base_size: the size of a Tx eth pkt cyclic buffer
  * @swq_base_addr: the base address of a Tx workqueue cyclic buffer
- * @swq_base_size: the size of a Tx workqueue cyclic buffer (relevant only for Gaudi1).
+ * @swq_base_size: the size of a Tx workqueue cyclic buffer
  * @txs_base_addr: base address of the ports timer cfg
  * @txs_base_size: size of the ports timer cfg
  * @wq_base_addr: base address of send and receive work-q
@@ -1303,7 +1300,7 @@ struct hl_cn_ctx {
  * @res_qpc_base_addr: the base address of a responder (receiver) QP context buffer
  * @res_qpc_base_size: the size of a requester (receiver) QP context buffer
  * @req_qpc_swl_base_addr: the base address of the Selective WQE List (SWL) portion of the
- *                         requester QPC (gaudi3)
+ *                         requester QPC
  * @req_qpc_swl_base_size: the size of a requester SWL QP context buffer
  * @max_hw_qps_num: maximum number of QPs supported by HW.
  * @max_qps_num: maximum number of QPs to allocate.
@@ -1492,9 +1489,6 @@ struct hl_cn_properties {
  * @umr_support: device supports UMR.
  * @ib_device_opened: Is true if IB deviced has been opened.
  * @multi_ctx_support: device supports multiple contexts.
- * @dram_enable: is DRAM available.
- * @gaudi2_setup_type: Gaudi2 setup type.
- * @gaudi3_setup_type: Gaudi3 setup type.
  */
 struct hl_cn_device {
 	struct pci_dev *pdev;
@@ -1599,12 +1593,6 @@ struct hl_cn_device {
 	u8 umr_support;
 	u8 ib_device_opened;
 	u8 multi_ctx_support;
-
-	/* Parameters for bring-up (not to be upstreamed) */
-	u8 dram_enable;
-	/* TODO: SW-165540 - unify PHY flows */
-	u8 gaudi2_setup_type;
-	u8 gaudi3_setup_type;
 };
 
 static inline void hl_cn_strtolower(char *str)

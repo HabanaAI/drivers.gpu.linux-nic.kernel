@@ -906,8 +906,7 @@ static void hl_cn_ib_query_device(struct hl_aux_dev *aux_dev, struct hl_ib_devic
 		dev_attr->fw_ver = ((u64)major << 32) | ((u64)minor << 16) | sub_ver;
 	}
 
-	/* IB restriction. Memory region must be > PAGE_SIZE. */
-	dev_attr->max_mr_size = hdev->dram_enable ? aux_data->dram_size : (2 * PAGE_SIZE);
+	dev_attr->max_mr_size = aux_data->dram_size;
 
 	dev_attr->page_size_cap = PAGE_SIZE;
 
@@ -1823,9 +1822,6 @@ static int hl_cn_set_static_properties(struct hl_cn_device *hdev)
 static int hl_cn_set_dram_properties(struct hl_cn_device *hdev)
 {
 	struct hl_cn_asic_funcs *asic_funcs = hdev->asic_funcs;
-
-	if (!hdev->dram_enable)
-		return 0;
 
 	return asic_funcs->set_dram_properties(hdev);
 }
@@ -3919,48 +3915,6 @@ out:
 	return rc;
 }
 
-/* used for backward compatibility, shouldn't be used by new ASICs */
-static int user_cq_set(struct hl_cn_device *hdev, struct hl_cni_user_cq_set_in *in,
-		       struct hl_cn_ctx *ctx)
-{
-	struct hl_cni_alloc_user_cq_id_out alloc_out = {};
-	struct hl_cni_user_cq_set_out_params set_out = {};
-	struct hl_cni_alloc_user_cq_id_in alloc_in = {};
-	struct hl_cni_user_cq_set_in_params set_in = {};
-	u32 port;
-	int rc;
-
-	if (!in) {
-		dev_dbg(hdev->dev, "missing parameters, can't set user CQ\n");
-		return -EINVAL;
-	}
-
-	port = in->port;
-
-	/* Legacy user CQ API had no allocation stage prior to the actual setting. Hence need to
-	 * call it manually.
-	 */
-	alloc_in.port = port;
-	rc = alloc_user_cq_id(hdev, &alloc_in, &alloc_out, ctx);
-	if (rc) {
-		dev_dbg(hdev->dev, "failed to allocate user CQ with ID 0, port %d\n", port);
-		return -EINVAL;
-	}
-
-	/* Legacy user CQ has a single user CQ (ID 0) per port */
-	if (alloc_out.id)
-		dev_crit(hdev->dev, "user CQ with a non zero ID was allocated (%d), port %d\n",
-			 alloc_out.id, port);
-
-	set_in.addr = in->addr;
-	set_in.port = port;
-	set_in.num_of_cqes = in->num_of_cqes;
-	/* This function is used for Gaudi only which supports a single CQ per port */
-	set_in.id = 0;
-
-	return __user_cq_set(hdev, &set_in, &set_out);
-}
-
 static int user_cq_id_set(struct hl_cn_device *hdev, struct hl_cni_user_cq_id_set_in *in,
 			  struct hl_cni_user_cq_id_set_out *out)
 {
@@ -4122,28 +4076,6 @@ out:
 	return rc;
 }
 
-/* used for backward compatibility, shouldn't be used by new ASICs */
-static int user_cq_unset(struct hl_cn_device *hdev, struct hl_cni_user_cq_unset_in *in)
-{
-	struct hl_cni_user_cq_unset_in_params in2 = {};
-
-	if (!in) {
-		dev_dbg(hdev->dev, "missing parameters, can't unset user CQ\n");
-		return -EINVAL;
-	}
-
-	if (in->pad) {
-		dev_dbg(hdev->dev, "Padding bytes must be 0\n");
-		return -EINVAL;
-	}
-
-	in2.port = in->port;
-	/* This function is used for Gaudi only which supports a single CQ per port */
-	in2.id = 0;
-
-	return __user_cq_unset(hdev, &in2);
-}
-
 static int user_cq_id_unset(struct hl_cn_device *hdev, struct hl_cni_user_cq_id_unset_in *in)
 {
 	struct hl_cni_user_cq_unset_in_params in2 = {};
@@ -4183,61 +4115,6 @@ static void user_cqs_destroy(struct hl_cn_ctx *ctx)
 				user_cq_unset_locked(user_cq, true);
 		}
 	}
-}
-
-/* used for backward compatibility, shouldn't be used by new ASICs */
-static int user_cq_update_ci(struct hl_cn_device *hdev, struct hl_cni_user_cq_update_ci_in *in)
-{
-	struct hl_cn_asic_port_funcs *port_funcs = hdev->asic_funcs->port_funcs;
-	struct hl_cn_properties *cn_props = &hdev->cn_props;
-	struct hl_cn_user_cq *user_cq;
-	struct hl_cn_port *cn_port;
-	u32 port, flags;
-	int rc;
-
-	if (!in) {
-		dev_dbg(hdev->dev, "missing parameters, can't set user CQ\n");
-		return -EINVAL;
-	}
-
-	flags = NIC_PORT_PRINT_ON_ERR;
-	if (!cn_props->force_cq)
-		flags |= NIC_PORT_CHECK_OPEN;
-
-	port = in->port;
-	rc = hl_cn_ioctl_port_check(hdev, port, flags);
-	if (rc)
-		return rc;
-
-	cn_port = &hdev->cn_ports[port];
-
-	/* This lock prevents concurrent CI updates for different ports which is undesirable, but we
-	 * need to protect here from user_cq_unset so this lock is essential. But the penalty is not
-	 * so big as the CI updates should happen only once in half cycle and not after each packet.
-	 */
-	port_funcs->cfg_lock(cn_port);
-
-	/* This function is used for Gaudi only which supports a single CQ per port */
-	user_cq = xa_load(&cn_port->cq_ids, 0);
-	if (!user_cq) {
-		dev_dbg(hdev->dev, "user CQ 0 wasn't allocated, can't update CI, port %d\n",
-			port);
-		rc = -EINVAL;
-		goto out;
-	}
-
-	if (user_cq->state != USER_CQ_STATE_SET) {
-		dev_dbg(hdev->dev, "user CQ 0 is disabled, can't update CI, port %d\n", port);
-		rc = -EINVAL;
-		goto out;
-	}
-
-	port_funcs->user_cq_update_ci(cn_port, in->ci);
-
-out:
-	port_funcs->cfg_unlock(cn_port);
-
-	return rc;
 }
 
 static int user_set_app_params(struct hl_cn_device *hdev,
@@ -5446,13 +5323,13 @@ static int __hl_cn_control(struct hl_cn_device *hdev, u32 op, void *input, void 
 		rc = user_wq_arr_unset(hdev, input, ctx);
 		break;
 	case HL_CNI_OP_USER_CQ_SET:
-		rc = user_cq_set(hdev, input, ctx);
+		rc = -EPERM;
 		break;
 	case HL_CNI_OP_USER_CQ_UNSET:
-		rc = user_cq_unset(hdev, input);
+		rc = -EPERM;
 		break;
 	case HL_CNI_OP_USER_CQ_UPDATE_CI:
-		rc = user_cq_update_ci(hdev, input);
+		rc = -EPERM;
 		break;
 	case HL_CNI_OP_ALLOC_USER_CQ_ID:
 		rc = alloc_user_cq_id(hdev, input, output, ctx);
@@ -6292,10 +6169,8 @@ static void hl_cn_late_init(struct hl_cn_device *hdev)
 	aux_ops->ports_stop_prepare = hl_cn_hard_reset_prepare;
 	aux_ops->ports_stop = hl_cn_stop;
 	aux_ops->synchronize_irqs = hl_cn_synchronize_irqs;
-#ifndef HL_XE
 	aux_ops->ctx_init = hl_cn_ctx_init;
 	aux_ops->ctx_fini = hl_cn_ctx_fini;
-#endif
 	aux_ops->ctx_kill = hl_cn_ctx_kill;
 	aux_ops->send_port_cpucp_status = hl_cn_send_port_cpucp_status;
 	aux_ops->mmap = hl_cn_mmap;
@@ -6319,10 +6194,8 @@ static void hl_cn_late_fini(struct hl_cn_device *hdev)
 	aux_ops->ports_stop_prepare = NULL;
 	aux_ops->ports_stop = NULL;
 	aux_ops->synchronize_irqs = NULL;
-#ifndef HL_XE
 	aux_ops->ctx_init = NULL;
 	aux_ops->ctx_fini = NULL;
-#endif
 	aux_ops->ctx_kill = NULL;
 	aux_ops->send_port_cpucp_status = NULL;
 	aux_ops->mmap = NULL;

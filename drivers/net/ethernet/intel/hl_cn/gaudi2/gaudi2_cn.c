@@ -4132,7 +4132,7 @@ static int gaudi2_cn_sw_init(struct hl_cn_device *hdev)
 
 	hdev->cn_props.max_qp_error_syndroms = NIC_MAX_QP_ERR_SYNDROMS;
 	hdev->cn_props.status_packet_size = sizeof(struct cpucp_nic_status);
-	hdev->wq_arrays_pool_enable = hdev->dram_enable;
+	hdev->wq_arrays_pool_enable = true;
 
 	return 0;
 

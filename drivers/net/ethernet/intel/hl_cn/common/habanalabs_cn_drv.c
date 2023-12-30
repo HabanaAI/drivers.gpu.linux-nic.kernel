@@ -216,13 +216,7 @@ static int hdev_init(struct hl_aux_dev *aux_dev)
 	hdev->num_of_dies = aux_data->num_of_dies;
 	hdev->accumulate_fec_duration = ACCUMULATE_FEC_STATS_DURATION_MS;
 
-	/* Gaudi uses polling mode by default. */
-	hdev->poll_enable = (!poll_enable_param_was_set && hdev->asic_type != HL_ASIC_GAUDI) ?
-			    false : poll_enable;
-
-	hdev->dram_enable = aux_data->dram_enable;
-	hdev->gaudi2_setup_type = aux_data->gaudi2_setup_type;
-	hdev->gaudi3_setup_type = aux_data->gaudi3_setup_type;
+	hdev->poll_enable = poll_enable_param_was_set ? poll_enable : false;
 
 	mutex_init(&hdev->hw_access_lock);
 

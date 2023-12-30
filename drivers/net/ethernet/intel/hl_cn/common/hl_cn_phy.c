@@ -44,12 +44,6 @@ static u32 get_data_rate(struct hl_cn_port *cn_port)
 	case SPEED_100000:
 		data_rate = NIC_DR_50;
 		break;
-	case SPEED_200000:
-		data_rate = NIC_DR_100;
-		break;
-	case SPEED_400000:
-		data_rate = NIC_DR_100;
-		break;
 	default:
 		data_rate = NIC_DR_50;
 		dev_err(hdev->dev, "unknown port %d speed, continue with 50 GHz\n", port);

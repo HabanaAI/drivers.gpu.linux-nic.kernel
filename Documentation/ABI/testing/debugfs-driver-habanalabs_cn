@@ -1,0 +1,233 @@
+What:           /sys/kernel/debug/habanalabs_cn/hl_cn<n>/nic_mac_loopback
+Date:           Nov 2020
+KernelVersion:  not yet upstreamed
+Contact:        oshpigelman@habana.ai
+Description:    Allows the root user to disable/enable MAC loopback for Gaudi
+                NIC ports. The ports will function as if a physical loopback
+                transceiver was connected. A bitmask should be provided where
+                each bit represents a port, up to 20 bits.
+                Known issues for this mode:
+                1. Odd ports PHY is not stopped so the peer's odd ports will get
+                PCS link.
+                2. Might cause an interrupt storm due to high B/W.
+
+What:           /sys/kernel/debug/habanalabs_cn/hl_cn<n>/nic_pcs_fail_time_frame
+Date:           Nov 2020
+KernelVersion:  not yet upstreamed
+Contact:        oshpigelman@habana.ai
+Description:    Allows the root user to set the used time frame in seconds for
+                detecting a loose PCS link of a Gaudi NIC port. We count how
+                many PCS link failures occurred in a time frame up to a
+                threshold which will cause PHY reconfiguration for getting a new
+                PCS link.
+
+What:           /sys/kernel/debug/habanalabs_cn/hl_cn<n>/nic_pcs_fail_threshold
+Date:           Nov 2020
+KernelVersion:  not yet upstreamed
+Contact:        oshpigelman@habana.ai
+Description:    Allows the root user to set the used threshold for detecting a
+                loose PCS link of a Gaudi NIC port. We count how many PCS link
+                failures occurred in a time frame up to the threshold which will
+                cause PHY reconfiguration for getting a new PCS link.
+
+What:           /sys/kernel/debug/habanalabs_cn/hl_cn<n>/nic_pam4_tx_taps
+Date:           Nov 2020
+KernelVersion:  not yet upstreamed
+Contact:        oshpigelman@habana.ai
+Description:    Allows the root user to set and show the PAM4 Tx taps for Gaudi NIC
+                port lanes. The lanes indices are 0-47.
+                Acceptable input string form:
+                <lane> <tx_pre2> <tx_pre1> <tx_main> <tx_post1> <tx_post2>.
+                cat nic_pam4_tx_taps will dump all taps.
+
+What:           /sys/kernel/debug/habanalabs_cn/hl_cn<n>/nic_nrz_tx_taps
+Date:           Jun 2022
+KernelVersion:  not yet upstreamed
+Contact:        sozeri@habana.ai
+Description:    Allows the root user to set and show the NRZ Tx taps for Gaudi NIC
+                port lanes. The lanes indices are 0-47.
+                Acceptable input string form:
+                <lane> <tx_pre2> <tx_pre1> <tx_main> <tx_post1> <tx_post2>.
+                cat nic_nrz_tx_taps will dump all taps.
+
+What:           /sys/kernel/debug/habanalabs_cn/hl_cn<n>/nic_polarity
+Date:           Nov 2020
+KernelVersion:  not yet upstreamed
+Contact:        oshpigelman@habana.ai
+Description:    Allows the root user to set the polarity for Gaudi NIC port
+                lanes. The lanes indices are 0-47.
+                Acceptable input string form: <lane> <pol_tx> <pol_rx>.
+
+What:           /sys/kernel/debug/habanalabs_cn/hl_cn<n>/nic_qp
+Date:           Nov 2020
+KernelVersion:  not yet upstreamed
+Contact:        oshpigelman@habana.ai
+Description:    Read a QP (Queue Pair) HW structure content. Need to write the
+                QP number, port, type and other flags to the file and then read
+                it in order to dump the QP content.
+                Input form: <port> <qpn> <is_req> <is_full_print> <force_read>.
+
+What:           /sys/kernel/debug/habanalabs_cn/hl_cn<n>/nic_wqe
+Date:           Jun 2022
+KernelVersion:  not yet upstreamed
+Contact:        zyehudai@habana.ai
+Description:    Read a WQE (Work Queue Entry) HW structure content. Need to write the
+                port, QP number, WQE index and it's type to the file and then read it
+                in order to dump the WQE content.
+                Input form: <port> <qpn> <wqe_idx> <is_tx>.
+
+What:           /sys/kernel/debug/habanalabs_cn/hl_cn<n>/nic_reset_cnt
+Date:           Nov 2020
+KernelVersion:  not yet upstreamed
+Contact:        oshpigelman@habana.ai
+Description:    Resets nic counters. Any decimal value is a valid input.
+
+What:           /sys/kernel/debug/habanalabs_cn/hl_cn<n>/nic_rand_status
+Date:           May 2021
+KernelVersion:  not yet upstreamed
+Contact:        oshpigelman@habana.ai
+Description:    Enable randomization for the values returned in the NIC status
+                packet. Value of "0" is for disable, otherwise enable.
+
+What:           /sys/kernel/debug/habanalabs_cn/hl_cn<n>/nic_mmu_bypass
+Date:           Jun 2021
+KernelVersion:  not yet upstreamed
+Contact:        zyehudai@habana.ai
+Description:    Sets the NIC to use MMU bypass for its allocated data structure.
+                Value of "0" is for disable, otherwise enable.
+
+What:           /sys/kernel/debug/habanalabs_cn/hl_cn<n>/nic_mac_lane_remap
+Date:           Aug 2021
+KernelVersion:  not yet upstreamed
+Contact:        akishore@habana.ai
+Description:    Allows root user to change MAC to PHY lane mapping. User should
+                provide space separated bitmap for all lanes on all NIC macros.
+                Usage: echo macro0 macro1 macro2 ... macroX > nic_mac_lane_remap
+
+What:           /sys/kernel/debug/habanalabs_cn/hl_cn<n>/nic_phy_regs_print
+Date:           Nov 2021
+KernelVersion:  not yet upstreamed
+Contact:        sozeri@habana.ai
+Description:    Allows the root user to dump all PHY registers reads/writes
+                during the PHY power_up flow.
+                value "0" is for disable, otherwise enable.
+
+What:           /sys/kernel/debug/habanalabs_cn/hl_cn<n>/nic_show_internal_ports_status
+Date:           Dec 2021
+KernelVersion:  not yet upstreamed
+Contact:        sozeri@habana.ai
+Description:    Allows the root user to read the link status of all internal
+                NIC ports.
+
+What:           /sys/kernel/debug/habanalabs_cn/hl_cn<n>/nic_print_fec_stats
+Date:           Jan 2022
+KernelVersion:  not yet upstreamed
+Contact:        sozeri@habana.ai
+Description:    Allows the root user to dump the FEC stats for all Gaudi2 NIC
+                ports to dmesg.
+                Usage: cat nic_print_fec_stats
+
+What:           /sys/kernel/debug/habanalabs_cn/hl_cn<n>/nic_disable_decap
+Date:           Jan 2022
+KernelVersion:  not yet upstreamed
+Contact:        gkgurumurthy@habana.ai
+Description:    Allows the root user to enable/disable the decapsulation logic on
+                the RX path.
+                '1' disables the logic, '0' enables the logic.
+                The typical use case is to disable the decap on rx with encap
+                enabled on the tx, and run the RDMA traffic. This causes the
+                packets to be forwarded to ethernet ring which is ultimately
+                sent to linux kernel. The user can analyze the RDMA packet using
+                tcpdump and validate the encapsulation header.
+
+What:           /sys/kernel/debug/habanalabs_cn/hl_cn<n>/nic_phy_set_nrz
+Date:           Jun 2022
+KernelVersion:  not yet upstreamed
+Contact:        sozeri@habana.ai
+Description:    Allows the root user to set/unset NRZ mode (25Gbps speed).
+                This configuration is relevant only for Gaudi2.
+                Usage: echo 0/1 > nic_phy_set_nrz
+
+What:           /sys/kernel/debug/habanalabs_cn/hl_cn<n>/nic_coll_lag_size
+Date:           July 2022
+KernelVersion:  not yet upstreamed
+Contact:        gkgurumurthy@habana.ai
+Description:    Allows the root user to write/read the collective operations lag size.
+                This configuration is relevant for Gaudi3 onwards.
+                Usage: echo <val> > nic_coll_lag_size
+                cat nic_coll_lag_size
+
+What:           /sys/kernel/debug/habanalabs_cn/hl_cn<n>/nic_phy_dump_serdes_params
+Date:           Aug 2022
+KernelVersion:  not yet upstreamed
+Contact:        sozeri@habana.ai
+Description:    Allows the root user to dump serdes parameters for a given port.
+                Need to write the port and then read it in order to dump the parameters.
+                Usage: echo <port> > nic_phy_dump_serdes_params
+                       cat nic_phy_dump_serdes_params
+
+What:           /sys/kernel/debug/habanalabs_cn/hl_cn<n>/nic_inject_rx_err
+Date:           Feb 2023
+KernelVersion:  not yet upstreamed
+Contact:        akishore@habana.ai
+Description:    Allows the root user to force RX packet drop.
+                Usage: echo <drop_percent> > nic_inject_rx_err
+                       cat nic_inject_rx_err
+
+What:           /sys/kernel/debug/habanalabs_cn/hl_cn<n>/nic_phy_calc_ber
+Date:           Feb 2023
+KernelVersion:  not yet upstreamed
+Contact:        sozeri@habana.ai
+Description:    Allows the root user to enable calculation of PHY BER during the PHY power_up flow.
+                value "0" is for disable, otherwise enable.
+
+What:           /sys/kernel/debug/habanalabs_cn/hl_cn<n>/nic_phy_calc_ber_wait_sec
+Date:           Feb 2023
+KernelVersion:  not yet upstreamed
+Contact:        sozeri@habana.ai
+Description:    Allows the root user to set the waiting time in seconds before BER calculating.
+                Usage: echo <time_in_seconds> > nic_phy_calc_ber_wait_sec
+
+What:           /sys/kernel/debug/habanalabs_cn/hl_cn<n>/nic_override_port_status
+Date:           Mar 2023
+KernelVersion:  not yet upstreamed
+Contact:        aagranovich@habana.ai
+Description:    Allows the root user to force set ports link status.
+                Usage: echo <port> <status> > nic_override_port_status
+
+What:           /sys/kernel/debug/habanalabs_cn/hl_cn<n>/nic_wqe_index_checker
+Date:           May 2023
+KernelVersion:  not yet upstreamed
+Contact:        dmeriin@habana.ai
+Description:    Allows the root user to enable/disable the WQE index checker.
+                value "0" is for disable, otherwise enable.
+                Usage: echo <enable> > nic_wqe_index_checker
+
+What:           /sys/kernel/debug/habanalabs_cn/hl_cn<n>/nic_phy_speed_rate
+Date:           Nov 2023
+KernelVersion:  N/A
+Contact:        dmeriin@habana.ai
+Description:    Allows the root user to set PHY speed rate. Valid rate IDs are:
+                    0 - NRZ 1.25 Gbps
+                    1 - NRZ 10.312 Gbps
+                    2 - NRZ 25.781 Gbps
+                    3 - NRZ 26.562 Gbps
+                    4 - NRZ 53.12 Gbps
+                    5 - PAM 53.12 Gbps
+                    6 - PAM 106.25 Gpbs
+                This configuration is relevant only for Gaudi3.
+                Usage: echo <speed_rate_id> > nic_phy_speed_rate
+                cat nic_phy_speed_rate
+
+What:           /sys/kernel/debug/habanalabs_cn/hl_cn<n>/nic_phy_training_type
+Date:           Nov 2023
+KernelVersion:  N/A
+Contact:        dmeriin@habana.ai
+Description:    Allows the root user to set PHY speed rate. Valid rate IDs are:
+                    0 - Link Training adaptation
+                    1 - Rx training without adaptation
+                    2 - HW Link Training
+                    3 - Auto negotiation link training
+                This configuration is relevant only for Gaudi3.
+                Usage: echo <training_type_id> > nic_phy_training_type
+                cat nic_phy_training_type

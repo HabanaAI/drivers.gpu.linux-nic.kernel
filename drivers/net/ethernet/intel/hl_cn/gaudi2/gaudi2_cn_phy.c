@@ -529,41 +529,9 @@ static void prbs_mode_select_rx(struct hl_cn_device *hdev, u32 port, int lane, b
 	}
 }
 
-static uint64_t get_default_tx_pol_mask_hls3(struct hl_cn_device *hdev)
-{
-	/* The Tx polarity for all cards is 0x0 */
-	return 0x0;
-}
-
-static uint64_t get_default_rx_pol_mask_hls3(struct hl_cn_device *hdev)
-{
-	switch (hdev->card_location) {
-	case 0:
-		return 0x34000000F040;
-	case 1:
-		return 0x00000C000003;
-	case 2:
-		return 0x0002FC00000F;
-	case 3:
-		return 0x083001000300;
-	case 4:
-		return 0x000000004090;
-	case 5:
-		return 0xF10070002000;
-	case 6:
-		return 0xF00003007000;
-	case 7:
-		return 0x0;
-	default:
-		dev_err(hdev->dev, "Invalid card location %u\n", hdev->card_location);
-	}
-
-	return 0x0;
-}
-
 static void set_default_polarity_values(struct hl_cn_device *hdev)
 {
-	enum gaudi2_setup_type setup_type = (enum gaudi2_setup_type) hdev->gaudi2_setup_type;
+	enum gaudi2_setup_type setup_type = GAUDI2_SETUP_TYPE_HLS2;
 	struct hl_cn_cpucp_info *cpucp_info = hdev->cpucp_info;
 	u64 pol_tx, pol_rx;
 
@@ -579,10 +547,6 @@ static void set_default_polarity_values(struct hl_cn_device *hdev)
 	case GAUDI2_SETUP_TYPE_HL325_S_EXT_LB:
 		pol_tx = NIC_PHY_TX_POL_MASK_HL225 ^ NIC_PHY_TX_POL_MASK_HL325_S;
 		pol_rx = NIC_PHY_RX_POL_MASK_HL225 ^ NIC_PHY_RX_POL_MASK_HL325_S;
-		break;
-	case GAUDI2_SETUP_TYPE_HLS3:
-		pol_tx = NIC_PHY_TX_POL_MASK_HL225 ^ get_default_tx_pol_mask_hls3(hdev);
-		pol_rx = NIC_PHY_RX_POL_MASK_HL225 ^ get_default_rx_pol_mask_hls3(hdev);
 		break;
 	default:
 		dev_err(hdev->dev, "Wrong setup type %d\n", setup_type);
@@ -601,7 +565,7 @@ static void set_default_mac_lane_remap(struct hl_cn_device *hdev)
 
 static s32 get_pam4_tap_pre2(struct hl_cn_device *hdev, u32 card_location, u32 abs_lane_idx)
 {
-	enum gaudi2_setup_type setup_type = (enum gaudi2_setup_type)hdev->gaudi2_setup_type;
+	enum gaudi2_setup_type setup_type = GAUDI2_SETUP_TYPE_HLS2;
 
 	switch (setup_type) {
 	case GAUDI2_SETUP_TYPE_HLS2:
@@ -619,7 +583,7 @@ static s32 get_pam4_tap_pre2(struct hl_cn_device *hdev, u32 card_location, u32 a
 
 static s32 get_pam4_tap_pre1(struct hl_cn_device *hdev, u32 card_location, u32 abs_lane_idx)
 {
-	enum gaudi2_setup_type setup_type = (enum gaudi2_setup_type)hdev->gaudi2_setup_type;
+	enum gaudi2_setup_type setup_type = GAUDI2_SETUP_TYPE_HLS2;
 
 	switch (setup_type) {
 	case GAUDI2_SETUP_TYPE_HLS2:
@@ -637,7 +601,7 @@ static s32 get_pam4_tap_pre1(struct hl_cn_device *hdev, u32 card_location, u32 a
 
 static s32 get_pam4_tap_main(struct hl_cn_device *hdev, u32 card_location, u32 abs_lane_idx)
 {
-	enum gaudi2_setup_type setup_type = (enum gaudi2_setup_type)hdev->gaudi2_setup_type;
+	enum gaudi2_setup_type setup_type = GAUDI2_SETUP_TYPE_HLS2;
 
 	switch (setup_type) {
 	case GAUDI2_SETUP_TYPE_HLS2:

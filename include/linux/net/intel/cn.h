@@ -135,7 +135,7 @@ struct hl_cn_ring {
  * @sb_base_addr: the base address of a Tx cyclic buffer.
  * @sb_base_size: the size of a Tx eth pkt cyclic buffer.
  * @swq_base_addr: the base address of a Tx workqueue cyclic buffer
- * @swq_base_size: the size of a Tx workqueue cyclic buffer (relevant only for Gaudi1).
+ * @swq_base_size: the size of a Tx workqueue cyclic buffer.
  * @ports_mask: mask of available ports.
  * @auto_neg_mask: mask of port with Autonegotiation enabled.
  * @pending_reset_long_timeout: long timeout for pending hard reset to finish in seconds.

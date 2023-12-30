@@ -102,19 +102,16 @@ struct hl_cni_mem_in {
 		/**
 		 * structure for exporting DMABUF object (used with
 		 * the HL_MEM_OP_EXPORT_DMABUF_FD op)
-		 * @addr: for Gaudi1, the driver expects a physical address
-		 *        inside the device's DRAM. this is because in Gaudi1
-		 *        we don't have MMU that covers the device's DRAM.
-		 *        for all other ASICs, the driver expects a device
+		 * @addr: for all other ASICs, the driver expects a device
 		 *        virtual address that represents the start address of
 		 *        a mapped DRAM memory area inside the device.
 		 *        the address must be the same as was received from the
 		 *        driver during a previous HL_MEM_OP_MAP operation.
 		 * @mem_size: size of memory to export.
-		 * @offset: for Gaudi1, this value must be 0. For all other ASICs,
-		 *          the driver expects an offset inside of the memory area
-		 *          describe by addr. the offset represents the start
-		 *          address of that the exported dma-buf object describes.
+		 * @offset: For all other ASICs, the driver expects an offset
+		 *          inside of the memory area described by addr.
+		 *          The offset represents the start address of that the
+		 *          exported dma-buf object describes.
 		 */
 		struct {
 			__u64 addr;
@@ -209,7 +206,7 @@ struct hl_cni_alloc_conn_out {
  * struct hl_cni_req_conn_ctx_in - NIC ioctl opcode HL_CNI_OP_SET_REQ_CONN_CTX in param
  * @dst_ip_addr: Destination IP address in native endianness
  * @dst_conn_id: Destination connection ID
- * @last_index: Index of last entry [2..(2^22)-1]. NOTE: relevant for Gaudi1 (only)
+ * @last_index: Unused, kept fot backward compatibility.
  * @port: NIC port ID
  * @conn_id: Connection ID
  * @dst_mac_addr: Destination MAC address
@@ -224,15 +221,10 @@ struct hl_cni_alloc_conn_out {
  * @mtu: Max Transmit Unit
  * @encap_en: used as boolean; indicates if this QP has encapsulation support
  * @encap_id: Encapsulation-id; valid only if 'encap_en' is set
- * @wq_size: Max number of elements in the work queue. NOTE: relevant for Gaudi2 (or higher)
+ * @wq_size: Max number of elements in the work queue
  * @loopback: used as boolean; indicates if this QP used for loopback mode.
- * @coll_lag_idx: (Gaudi3 and above) The index of the specific NIC within the LAG. Note that the
- *                advanced flag must be enabled in case it's being set.
- * @coll_last_in_lag: (Gaudi3 and above) Is the specific NIC the last one within the collective LAG.
- *                    Note that the advanced flag must be enabled in case it's being set.
  * @compression_en: Enable compression
  * @remote_key: Remote-key to be used to generate on outgoing packets
- * @sack_en: (Gaudi3 and above) Enable Selective Acknowlegment (SACK)
  */
 struct hl_cni_req_conn_ctx_in {
 	__u32 reserved;
@@ -259,11 +251,8 @@ struct hl_cni_req_conn_ctx_in {
 	__u8 encap_id;
 	__u32 wq_size;
 	__u8 loopback;
-	__u8 coll_lag_idx;
-	__u8 coll_last_in_lag;
 	__u8 compression_en;
 	__u32 remote_key;
-	__u8 sack_en;
 	__u8 pad[7];
 };
 
@@ -294,7 +283,6 @@ struct hl_cni_req_conn_ctx_out {
  * @encap_id: Encapsulation-id; valid only if 'encap_en' is set
  * @wq_peer_size: size of the peer Work queue
  * @local_key: Local-key to be used to validate against incoming packets
- * @sack_en: (Gaudi3 and above) Enable Selective Acknowlegment (SACK)
  */
 struct hl_cni_res_conn_ctx_in {
 	__u32 reserved;
@@ -316,7 +304,6 @@ struct hl_cni_res_conn_ctx_in {
 	__u8 encap_id;
 	__u32 wq_peer_size;
 	__u32 local_key;
-	__u8 sack_en;
 	__u8 pad[7];
 };
 
@@ -427,7 +414,7 @@ enum hl_nic_mem_type {
 };
 
 /**
- * enum hl_nic_mem_id - Gaudi2 (or higher) memory allocation methods
+ * enum hl_nic_mem_id - memory allocation methods
  * @HL_CNI_MEM_HOST: memory allocated on the host memory
  * @HL_CNI_MEM_DEVICE: memory allocated on the device memory
  */
@@ -437,7 +424,7 @@ enum hl_nic_mem_id {
 };
 
 /**
- * enum hl_nic_swq_granularity - Gaudi2 (or higher) send WQE granularity
+ * enum hl_nic_swq_granularity - send WQE granularity
  * @HL_CNI_SWQE_GRAN_32B: 32 byte WQE for linear write
  * @HL_CNI_SWQE_GRAN_64B: 64 byte WQE for multi-stride write
  */
@@ -448,12 +435,12 @@ enum hl_nic_swq_granularity {
 
 /**
  * struct hl_cni_user_wq_arr_set_in - NIC ioctl opcode HL_CNI_OP_USER_WQ_SET in param
- * @addr: WQ array address, NOTE: relevant for Gaudi1 (only)
+ * @addr: Unused, kept for backward compatibility
  * @port: NIC port ID
  * @num_of_wqs: Number of user WQs
  * @num_of_wq_entries: Number of entries per user WQ
  * @type: Type of user WQ array
- * @mem_id: Specify host/device memory allocation. NOTE: relevant for Gaudi2 (or higher)
+ * @mem_id: Specify host/device memory allocation
  * @swq_granularity: Specify the granularity of send WQ, 0: 32 bytes, 1: 64 bytes
  */
 struct hl_cni_user_wq_arr_set_in {
@@ -520,8 +507,7 @@ struct hl_cni_user_cq_update_ci_in {
 };
 
 /**
- * struct hl_cni_alloc_user_cq_id_in - NIC ioctl opcode HL_CNI_OP_ALLOC_USER_CQ_ID in param,
- *                                     relevant for Gaudi2 (or higher).
+ * struct hl_cni_alloc_user_cq_id_in - NIC ioctl opcode HL_CNI_OP_ALLOC_USER_CQ_ID in param.
  * @port: NIC port ID.
  */
 struct hl_cni_alloc_user_cq_id_in {
@@ -530,8 +516,7 @@ struct hl_cni_alloc_user_cq_id_in {
 };
 
 /**
- * struct hl_cni_alloc_user_cq_id_out - NIC ioctl opcode HL_CNI_OP_ALLOC_USER_CQ_ID out param,
- *                                      relevant for Gaudi2 (or higher).
+ * struct hl_cni_alloc_user_cq_id_out - NIC ioctl opcode HL_CNI_OP_ALLOC_USER_CQ_ID out param.
  * @id: CQ ID.
  */
 struct hl_cni_alloc_user_cq_id_out {
@@ -540,8 +525,7 @@ struct hl_cni_alloc_user_cq_id_out {
 };
 
 /**
- * struct hl_cni_user_cq_id_set_in - NIC ioctl opcode HL_CNI_OP_USER_CQ_SET in param, relevant for
- *                                   Gaudi2 (or higher).
+ * struct hl_cni_user_cq_id_set_in - NIC ioctl opcode HL_CNI_OP_USER_CQ_SET in param.
  * @port: NIC port ID.
  * @num_of_cqes: Number of CQ entries in the buffer.
  * @id: CQ ID.
@@ -554,8 +538,7 @@ struct hl_cni_user_cq_id_set_in {
 };
 
 /**
- * struct hl_cni_user_cq_id_set_out - NIC ioctl opcode HL_CNI_OP_USER_CQ_ID_SET out param, relevant
- *                                    for Gaudi2 (or higher).
+ * struct hl_cni_user_cq_id_set_out - NIC ioctl opcode HL_CNI_OP_USER_CQ_ID_SET out param.
  * @mem_handle: Handle of CQ memory buffer.
  * @pi_handle: Handle of CQ producer-inder memory buffer.
  * @regs_handle: Handle of CQ Registers base-address.
@@ -570,34 +553,13 @@ struct hl_cni_user_cq_id_set_out {
 };
 
 /**
- * struct hl_cni_user_cq_id_unset_in - NIC ioctl opcode HL_CNI_OP_USER_CQ_ID_UNSET in param,
- *                                     relevant for Gaudi2 (or higher).
+ * struct hl_cni_user_cq_id_unset_in - NIC ioctl opcode HL_CNI_OP_USER_CQ_ID_UNSET in param.
  * @port: NIC port ID.
  * @id: NIC CQ ID.
  */
 struct hl_cni_user_cq_id_unset_in {
 	__u32 port;
 	__u32 id;
-};
-
-/**
- * struct hl_cni_alloc_coll_conn_in - NIC ioctl opcode HL_CNI_OP_ALLOC_COLL_CONN in param,
- *                                    relevant for Gaudi3 (or higher).
- * @is_scale_out: Is this collective connection for scale out.
- */
-struct hl_cni_alloc_coll_conn_in {
-	__u8 is_scale_out;
-	__u8 pad[7];
-};
-
-/**
- * struct hl_cni_alloc_coll_conn_out - NIC ioctl opcode HL_CNI_OP_ALLOC_COLL_CONN out param,
- *                                     relevant for Gaudi3 (or higher).
- * @conn_id: Connection ID.
- */
-struct hl_cni_alloc_coll_conn_out {
-	__u32 conn_id;
-	__u32 pad;
 };
 
 /**
@@ -716,26 +678,12 @@ struct hl_cni_alloc_user_db_fifo_out {
 
 /**
  * enum hl_nic_db_fifo_type - NIC users FIFO modes of operation.
- * @HL_CNI_DB_FIFO_TYPE_DB: (Gaudi2 and above) mode for direct user door-bell submit.
- * @HL_CNI_DB_FIFO_TYPE_CC: (Gaudi2 and above) mode for congestion control.
- * @HL_CNI_DB_FIFO_TYPE_COLL_OPS_SHORT: (Gaudi3 and above) mode for short collective operations.
- * @HL_CNI_DB_FIFO_TYPE_COLL_OPS_LONG: (Gaudi3 and above) mode for long collective operations.
- * @HL_CNI_DB_FIFO_TYPE_DWQ_LIN: (Gaudi3 and above) mode for linear direct WQE submit.
- * @HL_CNI_DB_FIFO_TYPE_DWQ_MS: (Gaudi3 and above) mode for multi-stride WQE submit.
- * @HL_CNI_DB_FIFO_TYPE_COLL_DIR_OPS_SHORT: (Gaudi3 and above) mode for direct short collective
- *                                                             operations.
- * @HL_CNI_DB_FIFO_TYPE_COLL_DIR_OPS_LONG: (Gaudi3 and above) mode for direct long collective
- *                                                             operations.
+ * @HL_CNI_DB_FIFO_TYPE_DB: mode for direct user door-bell submit.
+ * @HL_CNI_DB_FIFO_TYPE_CC: mode for congestion control.
  */
 enum hl_nic_db_fifo_type {
 	HL_CNI_DB_FIFO_TYPE_DB = 0,
 	HL_CNI_DB_FIFO_TYPE_CC,
-	HL_CNI_DB_FIFO_TYPE_COLL_OPS_SHORT,
-	HL_CNI_DB_FIFO_TYPE_COLL_OPS_LONG,
-	HL_CNI_DB_FIFO_TYPE_DWQ_LIN,
-	HL_CNI_DB_FIFO_TYPE_DWQ_MS,
-	HL_CNI_DB_FIFO_TYPE_COLL_DIR_OPS_SHORT,
-	HL_CNI_DB_FIFO_TYPE_COLL_DIR_OPS_LONG,
 };
 
 /**
@@ -744,18 +692,12 @@ enum hl_nic_db_fifo_type {
  * @id: NIC DB-FIFO ID
  * @mode: represents desired mode of operation for provided FIFO, according to hl_nic_db_fifo_type
  * @dir_dup_ports_mask: ports for which the hw should duplicate the direct patcher descriptor
- *                                                                              (gaudi3 & above)
- * @base_sob_addr: base address of the sync object (gaudi3 & above)
- * @num_sobs: number of sync objects (gaudi3 & above)
  */
 struct hl_cni_user_db_fifo_set_in {
 	__u32 port;
 	__u32 id;
 	__u8 mode;
-	__u8 dir_dup_ports_mask;
-	__u8 pad[6];
-	__u32 base_sob_addr;
-	__u32 num_sobs;
+	__u8 pad[7];
 };
 
 /**
@@ -955,57 +897,51 @@ struct hl_cni_user_ccq_unset_in {
 #define HL_CNI_OP_CQ_CREATE			4
 /* Opcode to destroy a CQ */
 #define HL_CNI_OP_CQ_DESTROY			5
-/* Opcode to wait on CQ; relevant for Gaudi1 (only) */
+/* Unused, kept for backward compatibility */
 #define HL_CNI_OP_CQ_WAIT			6
-/* Opcode to poll on CQ; relevant for Gaudi1 (only) */
+/* Unused, kept for backward compatibility */
 #define HL_CNI_OP_CQ_POLL			7
-/* Opcode to update the number of consumed CQ entries
- * relevant for Gaudi1 (only)
- */
+/* Unused, kept for backward compatibility */
 #define HL_CNI_OP_CQ_UPDATE_CONSUMED_CQES	8
 /* Opcode to set a user WQ array */
 #define HL_CNI_OP_USER_WQ_SET			9
 /* Opcode to unset a user WQ array */
 #define HL_CNI_OP_USER_WQ_UNSET			10
-/* Opcode to set user CQ; relevant for Gaudi only */
+/* Unused, kept for backward compatibility */
 #define HL_CNI_OP_USER_CQ_SET			11
-/* Opcode to unset user CQ; relevant for Gaudi only */
+/* Unused, kept for backward compatibility */
 #define HL_CNI_OP_USER_CQ_UNSET			12
-/* Opcode to update the user CQ consumer index; relevant for Gaudi only */
+/* Unused, kept for backward compatibility */
 #define HL_CNI_OP_USER_CQ_UPDATE_CI		13
-/* Opcode to allocate a CQ; relevant for Gaudi2 (or higher) */
+/* Opcode to allocate a CQ */
 #define HL_CNI_OP_ALLOC_USER_CQ_ID		14
-/* Opcode to set specific user-application parameters
- * relevant for Gaudi2 (or higher)
- */
+/* Opcode to set specific user-application parameters */
 #define HL_CNI_OP_SET_USER_APP_PARAMS		15
-/* Opcode to get specific user-application parameters
- * relevant for Gaudi2 (or higher)
- */
+/* Opcode to get specific user-application parameters */
 #define HL_CNI_OP_GET_USER_APP_PARAMS		16
-/* Opcode to allocate a DB-FIFO; relevant for Gaudi2 (or higher) */
+/* Opcode to allocate a DB-FIFO */
 #define HL_CNI_OP_ALLOC_USER_DB_FIFO		17
-/* Opcode to create a DB-FIFO; relevant for Gaudi2 (or higher) */
+/* Opcode to create a DB-FIFO */
 #define HL_CNI_OP_USER_DB_FIFO_SET		18
-/* Opcode to destroy a DB-FIFO; relevant for Gaudi2 (or higher) */
+/* Opcode to destroy a DB-FIFO */
 #define HL_CNI_OP_USER_DB_FIFO_UNSET		19
-/* Opcode to poll on EQ; relevant for Gaudi2 (or higher) */
+/* Opcode to poll on EQ */
 #define HL_CNI_OP_EQ_POLL			20
-/* Opcode to allocate encapsulation ID; relevant for Gaudi2 (or higher) */
+/* Opcode to allocate encapsulation ID */
 #define HL_CNI_OP_USER_ENCAP_ALLOC		21
-/* Opcode to create an encapsulation; relevant for Gaudi2 (or higher) */
+/* Opcode to create an encapsulation */
 #define HL_CNI_OP_USER_ENCAP_SET		22
-/* Opcode to destroy an encapsulation; relevant for Gaudi2 (or higher) */
+/* Opcode to destroy an encapsulation */
 #define HL_CNI_OP_USER_ENCAP_UNSET		23
-/* Opcode to create a CCQ; relevant for Gaudi2 (or higher) */
+/* Opcode to create a CCQ */
 #define HL_CNI_OP_USER_CCQ_SET			24
-/* Opcode to destroy a CCQ; relevant for Gaudi2 (or higher) */
+/* Opcode to destroy a CCQ */
 #define HL_CNI_OP_USER_CCQ_UNSET		25
-/* Opcode to set user CQ by ID; relevant for Gaudi2 (or higher) */
+/* Opcode to set user CQ by ID */
 #define HL_CNI_OP_USER_CQ_ID_SET		26
-/* Opcode to unset user CQ by ID; relevant for Gaudi2 (or higher) */
+/* Opcode to unset user CQ by ID */
 #define HL_CNI_OP_USER_CQ_ID_UNSET		27
-/* Opcode to allocate collective connection ID; relevant for Gaudi3 (or higher) */
+/* Opcode to allocate collective connection ID */
 #define HL_CNI_OP_ALLOC_COLL_CONN		28
 /* Opcode to dump the context of a QP */
 #define HL_CNI_OP_DUMP_QP			29
