@@ -132,10 +132,6 @@ struct hl_cn_ring {
  * @qsfp_eeprom: QSFPD EEPROM info.
  * @mac_addr: array of all MAC addresses.
  * @asic_type: ASIC specific type.
- * @sb_base_addr: the base address of a Tx cyclic buffer.
- * @sb_base_size: the size of a Tx eth pkt cyclic buffer.
- * @swq_base_addr: the base address of a Tx workqueue cyclic buffer
- * @swq_base_size: the size of a Tx workqueue cyclic buffer.
  * @ports_mask: mask of available ports.
  * @auto_neg_mask: mask of port with Autonegotiation enabled.
  * @pending_reset_long_timeout: long timeout for pending hard reset to finish in seconds.
@@ -157,10 +153,6 @@ struct hl_en_aux_data {
 	char *qsfp_eeprom;
 	char **mac_addr;
 	enum hl_cn_asic_type asic_type;
-	u64 sb_base_addr;
-	u64 sb_base_size;
-	u64 swq_base_addr;
-	u64 swq_base_size;
 	u64 ports_mask;
 	u64 auto_neg_mask;
 	u32 pending_reset_long_timeout;

@@ -98,10 +98,6 @@ static int hdev_init(struct hl_aux_dev *aux_dev)
 	hdev->fw_ver = aux_data->fw_ver;
 	hdev->qsfp_eeprom = aux_data->qsfp_eeprom;
 	hdev->asic_type = aux_data->asic_type;
-	hdev->sb_base_addr = aux_data->sb_base_addr;
-	hdev->sb_base_size = aux_data->sb_base_size;
-	hdev->swq_base_addr = aux_data->swq_base_addr;
-	hdev->swq_base_size = aux_data->swq_base_size;
 	hdev->pending_reset_long_timeout = aux_data->pending_reset_long_timeout;
 	hdev->max_frm_len = aux_data->max_frm_len;
 	hdev->raw_elem_size = aux_data->raw_elem_size;

@@ -563,6 +563,26 @@ struct hl_cni_user_cq_id_unset_in {
 };
 
 /**
+ * struct hl_cni_alloc_coll_conn_in - NIC ioctl opcode HL_CNI_OP_ALLOC_COLL_CONN in param,
+ *                                    relevant for Gaudi3 (or higher).
+ * @is_scale_out: Is this collective connection for scale out.
+ */
+struct hl_cni_alloc_coll_conn_in {
+	__u8 is_scale_out;
+	__u8 pad[7];
+};
+
+/**
+ * struct hl_cni_alloc_coll_conn_out - NIC ioctl opcode HL_CNI_OP_ALLOC_COLL_CONN out param,
+ *                                     relevant for Gaudi3 (or higher).
+ * @conn_id: Connection ID.
+ */
+struct hl_cni_alloc_coll_conn_out {
+	__u32 conn_id;
+	__u32 pad;
+};
+
+/**
  * struct hl_cni_dump_qp_in - NIC ioctl opcode HL_CNI_OP_DUMP_QP in param.
  * @user_buf_address: Pre-allocated user buffer address to hold the dump output.
  * @user_buf_size: Size of the user buffer.
@@ -678,12 +698,26 @@ struct hl_cni_alloc_user_db_fifo_out {
 
 /**
  * enum hl_nic_db_fifo_type - NIC users FIFO modes of operation.
- * @HL_CNI_DB_FIFO_TYPE_DB: mode for direct user door-bell submit.
- * @HL_CNI_DB_FIFO_TYPE_CC: mode for congestion control.
+ * @HL_CNI_DB_FIFO_TYPE_DB: (Gaudi2 and above) mode for direct user door-bell submit.
+ * @HL_CNI_DB_FIFO_TYPE_CC: (Gaudi2 and above) mode for congestion control.
+ * @HL_CNI_DB_FIFO_TYPE_COLL_OPS_SHORT: (Gaudi3 and above) mode for short collective operations.
+ * @HL_CNI_DB_FIFO_TYPE_COLL_OPS_LONG: (Gaudi3 and above) mode for long collective operations.
+ * @HL_CNI_DB_FIFO_TYPE_DWQ_LIN: (Gaudi3 and above) mode for linear direct WQE submit.
+ * @HL_CNI_DB_FIFO_TYPE_DWQ_MS: (Gaudi3 and above) mode for multi-stride WQE submit.
+ * @HL_CNI_DB_FIFO_TYPE_COLL_DIR_OPS_SHORT: (Gaudi3 and above) mode for direct short collective
+ *                                                             operations.
+ * @HL_CNI_DB_FIFO_TYPE_COLL_DIR_OPS_LONG: (Gaudi3 and above) mode for direct long collective
+ *                                                             operations.
  */
 enum hl_nic_db_fifo_type {
 	HL_CNI_DB_FIFO_TYPE_DB = 0,
 	HL_CNI_DB_FIFO_TYPE_CC,
+	HL_CNI_DB_FIFO_TYPE_COLL_OPS_SHORT,
+	HL_CNI_DB_FIFO_TYPE_COLL_OPS_LONG,
+	HL_CNI_DB_FIFO_TYPE_DWQ_LIN,
+	HL_CNI_DB_FIFO_TYPE_DWQ_MS,
+	HL_CNI_DB_FIFO_TYPE_COLL_DIR_OPS_SHORT,
+	HL_CNI_DB_FIFO_TYPE_COLL_DIR_OPS_LONG,
 };
 
 /**
@@ -692,12 +726,18 @@ enum hl_nic_db_fifo_type {
  * @id: NIC DB-FIFO ID
  * @mode: represents desired mode of operation for provided FIFO, according to hl_nic_db_fifo_type
  * @dir_dup_ports_mask: ports for which the hw should duplicate the direct patcher descriptor
+ *                                                                              (gaudi3 & above)
+ * @base_sob_addr: base address of the sync object (gaudi3 & above)
+ * @num_sobs: number of sync objects (gaudi3 & above)
  */
 struct hl_cni_user_db_fifo_set_in {
 	__u32 port;
 	__u32 id;
 	__u8 mode;
-	__u8 pad[7];
+	__u8 dir_dup_ports_mask;
+	__u8 pad[6];
+	__u32 base_sob_addr;
+	__u32 num_sobs;
 };
 
 /**
@@ -941,8 +981,8 @@ struct hl_cni_user_ccq_unset_in {
 #define HL_CNI_OP_USER_CQ_ID_SET		26
 /* Opcode to unset user CQ by ID */
 #define HL_CNI_OP_USER_CQ_ID_UNSET		27
-/* Opcode to allocate collective connection ID */
-#define HL_CNI_OP_ALLOC_COLL_CONN		28
+/* Opcode reserved */
+#define HL_CNI_OP_RESERVED0			28
 /* Opcode to dump the context of a QP */
 #define HL_CNI_OP_DUMP_QP			29
 

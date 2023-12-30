@@ -1285,10 +1285,6 @@ struct hl_cn_ctx {
  * @nic_drv_size: the size of the memory in the device
  * @nic_drv_base_addr: the aligned base address of the memory in the device
  * @nic_drv_end_addr: the aligned end address of the memory in the device
- * @sb_base_addr: the base address of a Tx eth pkt cyclic buffer
- * @sb_base_size: the size of a Tx eth pkt cyclic buffer
- * @swq_base_addr: the base address of a Tx workqueue cyclic buffer
- * @swq_base_size: the size of a Tx workqueue cyclic buffer
  * @txs_base_addr: base address of the ports timer cfg
  * @txs_base_size: size of the ports timer cfg
  * @wq_base_addr: base address of send and receive work-q
@@ -1299,9 +1295,6 @@ struct hl_cn_ctx {
  * @req_qpc_base_size: the size of a requester (sender) QP context buffer
  * @res_qpc_base_addr: the base address of a responder (receiver) QP context buffer
  * @res_qpc_base_size: the size of a requester (receiver) QP context buffer
- * @req_qpc_swl_base_addr: the base address of the Selective WQE List (SWL) portion of the
- *                         requester QPC
- * @req_qpc_swl_base_size: the size of a requester SWL QP context buffer
  * @max_hw_qps_num: maximum number of QPs supported by HW.
  * @max_qps_num: maximum number of QPs to allocate.
  * @max_hw_user_wqs_num: maximum number of WQ entries supported by HW.
@@ -1335,10 +1328,6 @@ struct hl_cn_properties {
 	u64 nic_drv_size;
 	u64 nic_drv_base_addr;
 	u64 nic_drv_end_addr;
-	u64 sb_base_addr;
-	u64 sb_base_size;
-	u64 swq_base_addr;
-	u64 swq_base_size;
 	u64 txs_base_addr;
 	u64 txs_base_size;
 	u64 wq_base_addr;
@@ -1349,8 +1338,6 @@ struct hl_cn_properties {
 	u64 req_qpc_base_size;
 	u64 res_qpc_base_addr;
 	u64 res_qpc_base_size;
-	u64 req_qpc_swl_base_addr;
-	u64 req_qpc_swl_base_size;
 	u32 max_hw_qps_num;
 	u32 max_qps_num;
 	u32 max_hw_user_wqs_num;

@@ -141,10 +141,6 @@ struct hl_en_asic_funcs {
  * @mac_addr: array of all MAC addresses.
  * @asic_funcs: ASIC specific Ethernet functions.
  * @asic_type: ASIC specific type.
- * @sb_base_addr: the base address of a Tx eth pkt cyclic buffer.
- * @sb_base_size: the size of a Tx eth pkt cyclic buffer.
- * @swq_base_addr: the base address of a Tx workqueue cyclic buffer.
- * @swq_base_size: the size of a Tx workqueue cyclic buffer.
  * @ports_mask: mask of available ports.
  * @auto_neg_mask: mask of port with Autonegotiation enabled.
  * @port_reset_timeout: max time in seconds for a port reset flow to finish.
@@ -179,10 +175,6 @@ struct hl_en_device {
 	char *mac_addr;
 	struct hl_en_asic_funcs asic_funcs;
 	enum hl_cn_asic_type asic_type;
-	u64 sb_base_addr;
-	u64 sb_base_size;
-	u64 swq_base_addr;
-	u64 swq_base_size;
 	u64 ports_mask;
 	u64 auto_neg_mask;
 	u32 port_reset_timeout;

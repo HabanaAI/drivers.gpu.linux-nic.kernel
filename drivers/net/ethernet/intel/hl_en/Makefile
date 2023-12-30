@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-only
 #
-# HabanaLabs (an Intel Company) network driver
+# HabanaLabs (an Intel Company) Ethernet network driver
 #
 
 obj-$(CONFIG_HABANA_EN) := habanalabs_en.o

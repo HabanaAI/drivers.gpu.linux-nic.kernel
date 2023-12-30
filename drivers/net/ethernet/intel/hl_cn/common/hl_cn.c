@@ -1046,10 +1046,6 @@ static int hl_cn_en_aux_data_init(struct hl_cn_device *hdev)
 	en_aux_data->id = hdev->id;
 	en_aux_data->fw_ver = hdev->fw_ver;
 	en_aux_data->qsfp_eeprom = hdev->cpucp_info->qsfp_eeprom;
-	en_aux_data->sb_base_addr = cn_props->sb_base_addr;
-	en_aux_data->sb_base_size = cn_props->sb_base_size;
-	en_aux_data->swq_base_addr = cn_props->swq_base_addr;
-	en_aux_data->swq_base_size = cn_props->swq_base_size;
 	en_aux_data->pending_reset_long_timeout = hdev->pending_reset_long_timeout;
 	en_aux_data->max_frm_len = cn_props->max_frm_len;
 	en_aux_data->raw_elem_size = cn_props->raw_elem_size;
@@ -2103,22 +2099,6 @@ static void hl_cn_get_qp_id_range(struct hl_cn_port *cn_port, u32 *min_id, u32 *
 	*max_id = min(cn_port->qp_idx_offset + cn_port->num_of_wqs - 1, *max_id);
 }
 
-static void hl_cn_get_coll_qp_id_range(struct hl_cn_device *hdev, bool is_scale_out_conn,
-				       u32 *min_id, u32 *max_id)
-{
-	u32 coll_conn_type;
-
-	hdev->asic_funcs->get_coll_qp_id_range(hdev, is_scale_out_conn, min_id, max_id);
-
-	coll_conn_type = is_scale_out_conn ?
-			 HL_CN_COLL_CONN_TYPE_SCALE_OUT : HL_CN_COLL_CONN_TYPE_NON_SCALE_OUT;
-
-	/* Take the minimum between the max id supported by the port and the max id supported by
-	 * the WQs number the user asked to allocate.
-	 */
-	*max_id = min(*min_id + hdev->coll_props[coll_conn_type].num_of_coll_wqs - 1, *max_id);
-}
-
 static void hl_cn_qp_do_release(struct hl_cn_qp *qp)
 {
 	struct hl_cn_qpc_drain_attr drain_attr = { .wait_for_idle = false, };
@@ -2245,186 +2225,6 @@ qp_register_error:
 error_exit:
 	port_funcs->cfg_unlock(cn_port);
 	kfree(qp);
-	return rc;
-}
-
-static int alloc_coll_qp(struct hl_cn_device *hdev, struct hl_cn_ctx *ctx,
-			 struct hl_cni_alloc_coll_conn_in *in,
-			 struct hl_cni_alloc_coll_conn_out *out)
-{
-	u32 min_id, max_id, port, _port, coll_conn_type;
-	struct hl_cn_asic_port_funcs *port_funcs;
-	struct hl_cn_asic_funcs *asic_funcs;
-	struct hl_cn_coll_qp *coll_qp;
-	struct hl_cn_port *cn_port;
-	struct xa_limit id_limit;
-	bool is_scale_out_conn;
-	struct hl_cn_qp *qp;
-	u8 max_num_of_ports;
-	int id, rc;
-
-	if (!in || !out) {
-		dev_dbg(hdev->dev, "Missing parameters for allocating a collective QP\n");
-		return -EINVAL;
-	}
-
-	max_num_of_ports = hdev->cn_props.max_num_of_ports;
-
-	is_scale_out_conn = in->is_scale_out;
-
-	/* Return with failure in case not all ports are UP */
-	for (port = 0; port < max_num_of_ports; port++) {
-		if (!(hdev->ports_mask & BIT(port)))
-			continue;
-
-		cn_port = &hdev->cn_ports[port];
-
-		/* Skip of checking ports that are not of the requested collective type */
-		if (is_scale_out_conn ^ cn_port->eth_enable)
-			continue;
-
-		rc = hl_cn_ioctl_port_check(hdev, port,
-					    NIC_PORT_CHECK_OPEN | NIC_PORT_PRINT_ON_ERR);
-		if (rc)
-			return rc;
-	}
-
-	coll_qp = kzalloc(sizeof(*coll_qp), GFP_KERNEL);
-	if (!coll_qp)
-		return -ENOMEM;
-
-	coll_qp->qps_array = kcalloc(max_num_of_ports, sizeof(*coll_qp->qps_array), GFP_KERNEL);
-	if (!coll_qp->qps_array) {
-		kfree(coll_qp);
-		return -ENOMEM;
-	}
-
-	asic_funcs = hdev->asic_funcs;
-	port_funcs = asic_funcs->port_funcs;
-
-	coll_qp->hdev = hdev;
-	atomic_set(&coll_qp->num_of_initialized_qps, 0);
-	atomic_set(&coll_qp->num_of_allocated_qps, 0);
-
-	hl_cn_get_coll_qp_id_range(hdev, is_scale_out_conn, &min_id, &max_id);
-
-	coll_conn_type = is_scale_out_conn ?
-			 HL_CN_COLL_CONN_TYPE_SCALE_OUT : HL_CN_COLL_CONN_TYPE_NON_SCALE_OUT;
-
-	hl_cn_cfg_lock_all(hdev);
-
-	id_limit = XA_LIMIT(min_id, max_id);
-	rc = xa_alloc(&hdev->coll_props[coll_conn_type].coll_qp_ids, &id, coll_qp, id_limit,
-		      GFP_KERNEL);
-	if (rc) {
-		dev_dbg(hdev->dev, "Failed to allocate coll QP\n");
-		goto cfg_unlock_all;
-	}
-
-	coll_qp->id = id;
-	coll_qp->coll_conn_type = coll_conn_type;
-
-	for (port = 0; port < max_num_of_ports; port++) {
-		if (!(hdev->ports_mask & BIT(port)))
-			continue;
-
-		cn_port = &hdev->cn_ports[port];
-
-		/* Skip ports that are not of the requested collective type */
-		if (is_scale_out_conn ^ cn_port->eth_enable)
-			continue;
-
-		qp = kzalloc(sizeof(*qp), GFP_KERNEL);
-		if (!qp) {
-			rc = -ENOMEM;
-			goto free_qps;
-		}
-
-		coll_qp->qps_array[port] = qp;
-
-		qp->is_coll = true;
-		qp->coll_conn_type = coll_conn_type;
-		qp->cn_port = cn_port;
-		qp->port = port;
-		qp->ctx = ctx;
-		qp->curr_state = CN_QP_STATE_RESET;
-		INIT_WORK(&qp->async_work, qp_destroy_work);
-
-		/* TODO: handle local/remote keys */
-
-		qp->qp_id = id + port_funcs->get_coll_qps_offset(cn_port);
-
-		if (is_scale_out_conn)
-			atomic_inc(&cn_port->num_of_allocated_scale_out_coll_qps);
-		else
-			atomic_inc(&cn_port->num_of_allocated_coll_qps);
-
-		atomic_inc(&coll_qp->num_of_allocated_qps);
-	}
-
-	/* Register all the QPs to the dispatcher */
-	for (port = 0; port < max_num_of_ports; port++) {
-		if (!(hdev->ports_mask & BIT(port)))
-			continue;
-
-		cn_port = &hdev->cn_ports[port];
-
-		/* Skip ports that are not of the requested collective type */
-		if (is_scale_out_conn ^ cn_port->eth_enable)
-			continue;
-
-		qp = coll_qp->qps_array[port];
-
-		rc = port_funcs->register_qp(cn_port, qp->qp_id, ctx->asid);
-		if (rc) {
-			dev_dbg(hdev->dev,
-				"Failed to register collective QP %u for port %u\n",
-				qp->qp_id, port);
-			goto qp_register_error;
-		}
-	}
-
-	hl_cn_cfg_unlock_all(hdev);
-
-	out->conn_id = id;
-
-	return 0;
-
-qp_register_error:
-	for (_port = 0; _port < port; _port++) {
-		if (!(hdev->ports_mask & BIT(_port)))
-			continue;
-
-		qp = coll_qp->qps_array[port];
-		cn_port = &hdev->cn_ports[_port];
-
-		port_funcs->unregister_qp(cn_port, qp->qp_id);
-	}
-
-	port = max_num_of_ports;
-free_qps:
-	for (_port = 0; _port < port; _port++) {
-		if (!(hdev->ports_mask & BIT(_port)))
-			continue;
-
-		cn_port = &hdev->cn_ports[_port];
-
-		if (is_scale_out_conn)
-			atomic_dec(&cn_port->num_of_allocated_scale_out_coll_qps);
-		else
-			atomic_dec(&cn_port->num_of_allocated_coll_qps);
-
-		qp = coll_qp->qps_array[port];
-		coll_qp->qps_array[port] = NULL;
-		kfree(qp);
-	}
-
-	xa_erase(&hdev->coll_props[coll_conn_type].coll_qp_ids, coll_qp->id);
-cfg_unlock_all:
-	hl_cn_cfg_unlock_all(hdev);
-	kfree(coll_qp->qps_array);
-	kfree(coll_qp);
-
 	return rc;
 }
 
@@ -5372,9 +5172,6 @@ static int __hl_cn_control(struct hl_cn_device *hdev, u32 op, void *input, void 
 		break;
 	case HL_CNI_OP_USER_CQ_ID_UNSET:
 		rc = user_cq_id_unset(hdev, input);
-		break;
-	case HL_CNI_OP_ALLOC_COLL_CONN:
-		rc = alloc_coll_qp(hdev, ctx, input, output);
 		break;
 	case HL_CNI_OP_DUMP_QP:
 		rc = dump_qp(hdev, input);
