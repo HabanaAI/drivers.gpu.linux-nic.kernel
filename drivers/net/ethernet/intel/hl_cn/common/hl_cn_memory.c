@@ -5,7 +5,6 @@
  */
 
 #include <linux/vmalloc.h>
-#include <linux/genalloc.h>
 #include "habanalabs_cn.h"
 #include <trace/events/habanalabs_cn.h>
 

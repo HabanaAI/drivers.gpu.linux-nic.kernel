@@ -8,14 +8,15 @@
 #ifndef HABANALABS_CN_H_
 #define HABANALABS_CN_H_
 
-#include <linux/net/intel/cni.h>
 #include <linux/habanalabs/cpucp_if.h>
+#include <linux/net/intel/cni.h>
 #include <linux/net/intel/cn.h>
 
 #include <linux/netdevice.h>
 #include <linux/ctype.h>
 #include <linux/kfifo.h>
 #include <linux/bitfield.h>
+#include <linux/genalloc.h>
 
 #define RREG32(reg)			hl_cn_rreg(hdev, (reg))
 #define WREG32(reg, v)			hl_cn_wreg(hdev, (reg), (v))

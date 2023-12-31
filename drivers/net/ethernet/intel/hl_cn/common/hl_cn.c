@@ -10,7 +10,6 @@
 #include <linux/file.h>
 #include <linux/module.h>
 #include <linux/pci.h>
-#include <linux/genalloc.h>
 
 #define NIC_PCS_FAIL_TIME_FRAME_SEC	(60 * 5) /* 5 minutes */
 #define NIC_PCS_FAIL_THRESHOLD		8
