@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0
  *
+ * Copyright (C) 2023-2024, Intel Corporation.
  * Copyright 2021-2022 HabanaLabs, Ltd.
  * All Rights Reserved.
  *
