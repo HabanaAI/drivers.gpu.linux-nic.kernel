@@ -411,7 +411,6 @@ struct hl_cn_ev_dqs {
  * @req: true for requester QP, otherwise responder.
  * @full_print: print full QP information.
  * @force_read: force reading a QP in invalid/error state.
- * @exts_print: print QPC extensions like SAL or collective-descriptor.
  */
 struct hl_cn_qp_info {
 	u32 port;
@@ -419,7 +418,6 @@ struct hl_cn_qp_info {
 	u8 req;
 	u8 full_print;
 	u8 force_read;
-	u8 exts_print;
 };
 
 /**

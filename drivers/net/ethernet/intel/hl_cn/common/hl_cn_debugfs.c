@@ -500,8 +500,8 @@ static ssize_t debugfs_qp_write(struct file *f, const char __user *buf, size_t c
 {
 	struct hl_cn_device *hdev = file_inode(f)->i_private;
 	struct hl_cn_qp_info *qp_info = &hdev->qp_info;
-	u8 req, full_print, force_read, exts_print = 0;
 	u32 port, qpn, max_num_of_ports;
+	u8 req, full_print, force_read;
 	char kbuf[KBUF_IN_SIZE];
 	char *c1, *c2;
 	ssize_t rc;
@@ -588,28 +588,11 @@ static ssize_t debugfs_qp_write(struct file *f, const char __user *buf, size_t c
 		goto err;
 	}
 
-	/* handle the optional extensions print (if exists) */
-	if (!c2)
-		goto done;
-
-	c1 = c2 + 1;
-
-	rc = kstrtou8(c1, 10, &exts_print);
-	if (rc)
-		goto err;
-
-	if (exts_print & ~1) {
-		dev_err(hdev->dev, "exts_print should be 0 or 1\n");
-		goto err;
-	}
-
-done:
 	qp_info->port = port;
 	qp_info->qpn = qpn;
 	qp_info->req = req;
 	qp_info->full_print = full_print;
 	qp_info->force_read = force_read;
-	qp_info->exts_print = exts_print;
 
 	return count;
 err:

@@ -321,7 +321,6 @@ struct hl_ib_port_cnts_data {
  * @req: Requester QP, otherwise responder.
  * @full: Include full QP information.
  * @force: Force reading a QP in invalid/error state.
- * @exts: Include QPC extensions like SAL or collective-descriptor.
  */
 struct hl_ib_dump_qp_attr {
 	u32 port;
@@ -329,7 +328,6 @@ struct hl_ib_dump_qp_attr {
 	u8 req;
 	u8 full;
 	u8 force;
-	u8 exts;
 };
 
 /**
