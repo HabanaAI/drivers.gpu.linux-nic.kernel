@@ -4101,8 +4101,6 @@ static int gaudi2_cn_sw_init(struct hl_cn_device *hdev)
 				  BIT(NIC_OVERRIDE_PORT_STATUS) |
 				  BIT(NIC_ACCUMULATE_FEC_DURATION);
 
-	hdev->ib_support = true;
-
 	if (hdev->pdev) {
 		hdev->qpc_cache_inv_timeout = hdev->pldm ? NIC_PLDM_QPC_INV_USEC :
 					      NIC_QPC_INV_USEC;
@@ -4503,22 +4501,16 @@ static u32 gaudi2_cn_get_default_port_speed(struct hl_cn_device *hdev)
 	return SPEED_100000;
 }
 
-static void gaudi2_cn_get_cnts_names(struct hl_cn_port *cn_port, u8 *data, bool ext)
+static void gaudi2_cn_get_cnts_names(struct hl_cn_port *cn_port, u8 *data)
 {
-	char str[HL_IB_CNT_NAME_LEN], *rx_fmt, *tx_fmt;
+	char str[ETH_GSTRING_LEN], *rx_fmt, *tx_fmt;
 	struct hl_cn_stat *spmu_stats;
 	u32 n_spmu_stats;
 	int i, len;
 
-	if (ext) {
-		len = HL_IB_CNT_NAME_LEN;
-		rx_fmt = "rx_%s";
-		tx_fmt = "tx_%s";
-	} else {
-		len = ETH_GSTRING_LEN;
-		rx_fmt = "%s";
-		tx_fmt = "%s";
-	}
+	len = ETH_GSTRING_LEN;
+	rx_fmt = "%s";
+	tx_fmt = "%s";
 
 	hl_cn_spmu_get_stats_info(cn_port, &spmu_stats, &n_spmu_stats);
 

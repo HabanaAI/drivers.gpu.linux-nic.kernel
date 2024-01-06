@@ -16,7 +16,6 @@
 #include <uapi/linux/ethtool.h>
 
 #define HL_CN_NAME		"habanalabs_cn"
-#define HL_IB_NAME		"habanalabs_ib"
 
 #define HL_EN_MAX_HEADERS_SZ	(ETH_HLEN + 2 * VLAN_HLEN + ETH_FCS_LEN)
 
@@ -32,14 +31,10 @@
  * enum hl_cn_asic_type - supported ASIC types.
  * @ASIC_GAUDI: Gaudi device.
  * @ASIC_GAUDI2: Gaudi2 device.
- * @ASIC_GAUDI3: Gaudi3 device.
- * @ASIC_FS1: FS1 device.
  */
 enum hl_cn_asic_type {
 	HL_ASIC_GAUDI,
 	HL_ASIC_GAUDI2,
-	HL_ASIC_GAUDI3,
-	HL_ASIC_FS1,
 };
 
 /**
@@ -58,12 +53,10 @@ enum hl_cn_status_cmd {
  * enum hl_aux_dev_type - auxiliary device type.
  * HL_AUX_DEV_CN: Shared Network Interface.
  * HL_AUX_DEV_ETH: Ethernet.
- * HL_AUX_DEV_IB: InfiniBand.
  */
 enum hl_aux_dev_type {
 	HL_AUX_DEV_CN,
 	HL_AUX_DEV_ETH,
-	HL_AUX_DEV_IB,
 };
 
 /**
@@ -350,7 +343,6 @@ typedef bool (*hl_cn_poll_cond_func)(u32 val, void *arg);
  * @synchronize_irqs: Synchronize IRQs.
  * @ctx_init: Initialize user context.
  * @ctx_fini: Cleanup user context.
- * @ctx_kill: Kill user context.
  * @send_port_cpucp_status: Send port status to FW.
  * @mmap: Map CN memory.
  * @get_port_state: Get port link state (used by Gaudi1 only).
@@ -413,7 +405,6 @@ struct hl_cn_aux_ops {
 	void (*synchronize_irqs)(struct hl_aux_dev *aux_dev);
 	int (*ctx_init)(struct hl_aux_dev *aux_dev, u32 asid);
 	void (*ctx_fini)(struct hl_aux_dev *aux_dev, u32 asid);
-	void (*ctx_kill)(struct hl_aux_dev *aux_dev, void *cn_ctx);
 	int (*send_port_cpucp_status)(struct hl_aux_dev *aux_dev, u32 port, u8 cmd, u8 period);
 	int (*mmap)(struct hl_aux_dev *aux_dev, u32 asid, struct vm_area_struct *vma);
 	int (*get_port_state)(struct hl_aux_dev *aux_dev, u32 port, bool *up);

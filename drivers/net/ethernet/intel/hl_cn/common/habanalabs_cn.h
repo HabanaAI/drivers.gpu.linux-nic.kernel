@@ -867,7 +867,7 @@ struct hl_cn_asic_port_funcs {
 	void (*user_cq_destroy)(struct hl_cn_user_cq *user_cq);
 	void (*user_cq_update_ci)(struct hl_cn_port *cn_port, u32 ci);
 	int (*get_cnts_num)(struct hl_cn_port *cn_port);
-	void (*get_cnts_names)(struct hl_cn_port *cn_port, u8 *data, bool ext);
+	void (*get_cnts_names)(struct hl_cn_port *cn_port, u8 *data);
 	void (*get_cnts_values)(struct hl_cn_port *cn_port, u64 *data);
 	int (*port_sw_init)(struct hl_cn_port *cn_port);
 	void (*port_sw_fini)(struct hl_cn_port *cn_port);
@@ -1259,7 +1259,6 @@ struct hl_cn_comp_vm_info {
  * @comp_handle: compute handle.
  * @asid: ASID for accessing driver memory.
  * @user_asid: ASID for accessing user memory:
- * @ib_allocated: context was allocated from IB flow. TODO: SW-156182 - remove this
  * @active: context was killed.
  * @deallocated: context was deallocated.
  */
@@ -1273,7 +1272,6 @@ struct hl_cn_ctx {
 	u64 comp_handle;
 	u32 asid;
 	u32 user_asid;
-	u8 ib_allocated;
 	u8 killed;
 	u8 deallocated;
 };
@@ -1382,7 +1380,6 @@ struct hl_cn_properties {
  * @asic_specific: ASIC specific information to use only from ASIC files.
  * @cn_aux_dev: pointer to CN auxiliary device.
  * @en_aux_dev: Ethernet auxiliary device.
- * @ib_aux_dev: InfiniBand auxiliary device.
  * @qp_info: details of a QP to read via debugfs.
  * @wqe_info: details of a WQE to read via debugfs.
  * @ctx: user context. TODO: SW-156182 - remove this
@@ -1452,12 +1449,10 @@ struct hl_cn_properties {
  * @skip_mac_reset: skip MAC reset.
  * @skip_mac_cnts: Used to skip MAC counters when running simulator.
  * @skip_odd_ports_cfg_lock: do not lock the odd ports when acquiring the cfg lock for all ports.
- * @ib_support: InfiniBand support.
  * @mmu_enable: is MMU enabled.
  * @eth_loopback: enable hack in hl_en_handle_tx to test eth traffic.
  * @lanes_per_port: number of physical lanes per port.
  * @is_eth_aux_dev_initialized: true if the eth auxiliary device is initialized.
- * @is_ib_aux_dev_initialized: true if the IB auxiliary device is initialized.
  * @rx_drop_percent: RX packet drop percentage set via debugfs.
  * @rand_status: randomize the FW status counters (used for testing).
  * @status_period: periodic time in secs at which FW expects status packet.
@@ -1474,7 +1469,6 @@ struct hl_cn_properties {
  * @lpbk_pcs_cfg: Loopback configuration is done via PCS instead of the MAC channels.
  * @hw_invalid_while_teardown: HW is unavailable during device teardown.
  * @umr_support: device supports UMR.
- * @ib_device_opened: Is true if IB deviced has been opened.
  * @multi_ctx_support: device supports multiple contexts.
  */
 struct hl_cn_device {
@@ -1494,7 +1488,6 @@ struct hl_cn_device {
 	char *driver_ver;
 	struct hl_aux_dev *cn_aux_dev;
 	struct hl_aux_dev en_aux_dev;
-	struct hl_aux_dev ib_aux_dev;
 	struct hl_cn_qp_info qp_info;
 	struct hl_cn_wqe_info wqe_info;
 	struct hl_cn_ctx *ctx;
@@ -1556,12 +1549,10 @@ struct hl_cn_device {
 	u8 skip_mac_reset;
 	u8 skip_mac_cnts;
 	u8 skip_odd_ports_cfg_lock;
-	u8 ib_support;
 	u8 mmu_enable;
 	u8 eth_loopback;
 	u8 lanes_per_port;
 	u8 is_eth_aux_dev_initialized;
-	u8 is_ib_aux_dev_initialized;
 	u8 rx_drop_percent;
 	u8 rand_status;
 	u8 status_period;
@@ -1578,7 +1569,6 @@ struct hl_cn_device {
 	u8 lpbk_pcs_cfg;
 	u8 hw_invalid_while_teardown;
 	u8 umr_support;
-	u8 ib_device_opened;
 	u8 multi_ctx_support;
 };
 
@@ -1692,7 +1682,6 @@ void hl_cn_free_ring(struct hl_cn_device *hdev, struct hl_cn_ring *ring);
 
 struct hl_cn_user_cq *hl_cn_user_cq_get(struct hl_cn_port *cn_port, u8 cq_id);
 int hl_cn_user_cq_put(struct hl_cn_user_cq *user_cq);
-bool hl_cn_is_ibdev(struct hl_cn_device *hdev);
 
 void gaudi2_cn_set_asic_funcs(struct hl_cn_device *hdev);
 

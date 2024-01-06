@@ -46,13 +46,7 @@
 
 #define NIC_DUMP_QP_SZ			SZ_4K
 
-#define HL_AUX2NIC(aux_dev)	\
-	({ \
-		struct hl_aux_dev *__aux_dev = (aux_dev); \
-		((__aux_dev)->type == HL_AUX_DEV_ETH) ? \
-		container_of(__aux_dev, struct hl_cn_device, en_aux_dev) : \
-		container_of(__aux_dev, struct hl_cn_device, ib_aux_dev); \
-	})
+#define HL_AUX2NIC(aux_dev)	container_of(aux_dev, struct hl_cn_device, en_aux_dev)
 
 #define RAND_STAT_CNT(cnt) \
 	do { \
@@ -150,10 +144,6 @@ static void qp_destroy_work(struct work_struct *work);
 static int __user_wq_arr_unset(struct hl_cn_ctx *ctx, struct hl_cn_port *cn_port, u32 type);
 static void user_cq_destroy(struct kref *kref);
 static void set_app_params_clear(struct hl_cn_device *hdev);
-static int hl_cn_ib_cmd_ctrl(struct hl_aux_dev *aux_dev, void *cn_ib_ctx, u32 op, void *input,
-			     void *output);
-static int hl_cn_ib_mmap(struct hl_aux_dev *aux_dev, void *cn_ib_ctx,
-			 struct vm_area_struct *vma);
 static void hl_cn_reset_stats_counters_port(struct hl_cn_device *hdev, u32 port);
 static void hl_cn_late_init(struct hl_cn_device *hdev);
 static void hl_cn_late_fini(struct hl_cn_device *hdev);
@@ -252,18 +242,18 @@ static int __hl_cn_get_cnts_num(struct hl_cn_port *cn_port)
 		hdev->asic_funcs->port_funcs->get_cnts_num(cn_port);
 }
 
-static void __hl_cn_get_cnts_names(struct hl_cn_port *cn_port, u8 *data, bool ext)
+static void __hl_cn_get_cnts_names(struct hl_cn_port *cn_port, u8 *data)
 {
 	struct hl_cn_device *hdev = cn_port->hdev;
 	int i, len;
 
-	len = ext ? HL_IB_CNT_NAME_LEN : ETH_GSTRING_LEN;
+	len = ETH_GSTRING_LEN;
 
 	for (i = 0; i < pcs_counters_str_len; i++)
 		memcpy(data + i * len, pcs_counters_str[i], ETH_GSTRING_LEN);
 	data += i * len;
 
-	hdev->asic_funcs->port_funcs->get_cnts_names(cn_port, data, ext);
+	hdev->asic_funcs->port_funcs->get_cnts_names(cn_port, data);
 }
 
 static void __hl_cn_get_cnts_values(struct hl_cn_port *cn_port, u64 *data)
@@ -489,7 +479,7 @@ static void hl_cn_get_cnts_names(struct hl_aux_dev *aux_dev, u32 port, u8 *data)
 
 	cn_port = &hdev->cn_ports[port];
 
-	__hl_cn_get_cnts_names(cn_port, data, false);
+	__hl_cn_get_cnts_names(cn_port, data);
 }
 
 static void hl_cn_get_cnts_values(struct hl_aux_dev *aux_dev, u32 port, u64 *data)
@@ -655,346 +645,6 @@ static void hl_cn_port_toggle_count(struct hl_aux_dev *aux_dev, u32 port)
 	cn_port->port_toggle_cnt++;
 }
 
-/* Check for initialized HL IB device. */
-bool hl_cn_is_ibdev(struct hl_cn_device *hdev)
-{
-	return !!hdev->ib_aux_dev.priv;
-}
-
-/* Check for opened HL IB device. */
-static bool hl_cn_is_ibdev_opened(struct hl_cn_device *hdev)
-{
-	return hdev->ib_aux_dev.priv && hdev->ib_device_opened;
-}
-
-static int hl_cn_ib_alloc_ucontext(struct hl_aux_dev *ib_aux_dev, int user_fd, void **cn_ib_ctx)
-{
-	struct hl_cn_comp_vm_info *user_vm_info, *driver_vm_info;
-	struct hl_cn_device *hdev = HL_AUX2NIC(ib_aux_dev);
-	struct hl_aux_dev *aux_dev = hdev->cn_aux_dev;
-	struct hl_cn_asic_funcs *asic_funcs;
-	struct hl_cn_aux_ops *aux_ops;
-	struct hl_cn_ctx *ctx;
-	int rc;
-
-	asic_funcs = hdev->asic_funcs;
-	aux_ops = aux_dev->aux_ops;
-
-	if (hdev->multi_ctx_support || !hdev->ctx) {
-		ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
-		if (!ctx)
-			return -ENOMEM;
-
-		ctx->hdev = hdev;
-		mutex_init(&ctx->lock);
-		ctx->ib_allocated = true;
-	} else {
-		ctx = hdev->ctx;
-	}
-
-	user_vm_info = &ctx->user_vm_info;
-	driver_vm_info = &ctx->driver_vm_info;
-
-	rc = aux_ops->register_cn_user_context(aux_dev, user_fd, ctx, &ctx->comp_handle,
-					       &user_vm_info->vm_handle);
-	if (rc) {
-		dev_dbg(hdev->dev, "Failed to register user context with FD %d\n", user_fd);
-		goto release_ctx;
-	}
-
-	if (user_vm_info->vm_handle != ctx->comp_handle) {
-		rc = aux_ops->get_vm_info(aux_dev, user_vm_info->vm_handle, &user_vm_info->vm_info);
-		if (rc) {
-			dev_err(hdev->dev, "Failed to get user VM info for handle 0x%llx\n",
-				user_vm_info->vm_handle);
-			goto deregister_ctx;
-		}
-
-		if (user_vm_info->vm_info.mmu_mode == HL_CN_MMU_MODE_NETWORK_TLB)
-			ctx->user_asid = user_vm_info->vm_info.net_tlb.pasid;
-		else
-			ctx->user_asid = user_vm_info->vm_info.ext_mmu.work_id;
-	} else {
-		/* No data transfer in this mode */
-		ctx->user_asid = -1;
-	}
-
-	rc = aux_ops->vm_create(aux_dev, ctx->comp_handle, 0, &driver_vm_info->vm_handle);
-	if (rc) {
-		dev_err(hdev->dev, "Failed to create driver VM for vompute handle 0x%llx\n",
-			ctx->comp_handle);
-		goto deregister_ctx;
-	}
-
-	rc = aux_ops->get_vm_info(aux_dev, driver_vm_info->vm_handle, &driver_vm_info->vm_info);
-	if (rc) {
-		dev_err(hdev->dev, "Failed to get driver VM info for handle 0x%llx\n",
-			driver_vm_info->vm_handle);
-		goto destroy_driver_vm;
-	}
-
-	if (driver_vm_info->vm_info.mmu_mode == HL_CN_MMU_MODE_NETWORK_TLB)
-		ctx->asid = driver_vm_info->vm_info.net_tlb.pasid;
-	else
-		ctx->asid = driver_vm_info->vm_info.ext_mmu.work_id;
-
-	if (ctx->ib_allocated) {
-		/* must be called before calling create_mem_ctx */
-		rc = asic_funcs->ctx_init(ctx);
-		if (rc) {
-			dev_err(hdev->dev, "failed to init user context with ASID %d\n", ctx->asid);
-			goto destroy_driver_vm;
-		}
-	}
-
-	if (ctx->user_asid != -1 && user_vm_info->vm_info.mmu_mode == HL_CN_MMU_MODE_NETWORK_TLB) {
-		rc = asic_funcs->create_mem_ctx(ctx, user_vm_info->vm_info.net_tlb.pasid,
-						user_vm_info->vm_info.net_tlb.page_tbl_addr);
-		if (rc) {
-			dev_err(hdev->dev,
-				"failed to create HW memory context for user VM, FD %d\n", user_fd);
-			goto ctx_cleanup;
-		}
-	}
-
-	if (driver_vm_info->vm_info.mmu_mode == HL_CN_MMU_MODE_NETWORK_TLB) {
-		rc = asic_funcs->create_mem_ctx(ctx, driver_vm_info->vm_info.net_tlb.pasid,
-						driver_vm_info->vm_info.net_tlb.page_tbl_addr);
-		if (rc) {
-			dev_err(hdev->dev,
-				"failed to create HW memory context for driver VM, FD %d\n",
-				user_fd);
-			goto user_vm_ctx_cleanup;
-		}
-	}
-
-	*cn_ib_ctx = ctx;
-	hdev->ib_device_opened = true;
-
-	if (ctx->ib_allocated)
-		hdev->ctx = ctx;
-
-	return 0;
-
-user_vm_ctx_cleanup:
-	if (ctx->user_asid != -1 && user_vm_info->vm_info.mmu_mode == HL_CN_MMU_MODE_NETWORK_TLB)
-		asic_funcs->destroy_mem_ctx(ctx, user_vm_info->vm_info.net_tlb.pasid,
-					    user_vm_info->vm_info.net_tlb.page_tbl_addr);
-ctx_cleanup:
-	if (ctx->ib_allocated)
-		asic_funcs->ctx_fini(ctx);
-destroy_driver_vm:
-	aux_ops->vm_destroy(aux_dev, driver_vm_info->vm_handle);
-deregister_ctx:
-	aux_ops->deregister_cn_user_context(aux_dev, user_vm_info->vm_handle);
-release_ctx:
-	if (ctx->ib_allocated) {
-		mutex_destroy(&ctx->lock);
-		kfree(ctx);
-	}
-
-	return rc;
-}
-
-static void hl_cn_ib_dealloc_ucontext(struct hl_aux_dev *ib_aux_dev, void *cn_ib_ctx)
-{
-	struct hl_cn_comp_vm_info *user_vm_info, *driver_vm_info;
-	struct hl_cn_device *hdev = HL_AUX2NIC(ib_aux_dev);
-	struct hl_aux_dev *aux_dev = hdev->cn_aux_dev;
-	struct hl_cn_asic_funcs *asic_funcs;
-	struct hl_cn_ctx *ctx = cn_ib_ctx;
-	struct hl_cn_aux_ops *aux_ops;
-	bool should_destroy;
-
-	aux_ops = aux_dev->aux_ops;
-	asic_funcs = hdev->asic_funcs;
-	user_vm_info = &ctx->user_vm_info;
-	driver_vm_info = &ctx->driver_vm_info;
-
-	dev_dbg(hdev->dev, "IB context dealloc\n");
-
-	mutex_lock(&ctx->lock);
-
-	if (driver_vm_info->vm_info.mmu_mode == HL_CN_MMU_MODE_NETWORK_TLB)
-		asic_funcs->destroy_mem_ctx(ctx, driver_vm_info->vm_info.net_tlb.pasid,
-					    driver_vm_info->vm_info.net_tlb.page_tbl_addr);
-
-	if (ctx->user_asid != -1 && user_vm_info->vm_info.mmu_mode == HL_CN_MMU_MODE_NETWORK_TLB)
-		asic_funcs->destroy_mem_ctx(ctx, user_vm_info->vm_info.net_tlb.pasid,
-					    user_vm_info->vm_info.net_tlb.page_tbl_addr);
-
-	if (ctx->ib_allocated)
-		__hl_cn_ctx_fini(hdev, ctx);
-	else
-		set_app_params_clear(hdev);
-
-	aux_ops->vm_destroy(aux_dev, driver_vm_info->vm_handle);
-	aux_ops->deregister_cn_user_context(aux_dev, user_vm_info->vm_handle);
-
-	ctx->deallocated = true;
-
-	/* Currently a context can be created from the old ctx_init() flow or from the new
-	 * alloc_ucontext() flow. Only if the context was created via the new flow we should destroy
-	 * it here. Otherwise it will be destroyed in ctx_fini().
-	 * Moreover, if mutiple contexts are supported then a context should be killed before it is
-	 * destroyed. Hence we should destroy a context here only if it was already killed,
-	 * otherwise it will be destroyed as part of ctx_kill().
-	 */
-	should_destroy = ctx->ib_allocated && (!hdev->multi_ctx_support || ctx->killed);
-
-	mutex_unlock(&ctx->lock);
-
-	if (should_destroy) {
-		mutex_destroy(&ctx->lock);
-		kfree(ctx);
-	}
-
-	hdev->ib_device_opened = false;
-}
-
-static void hl_cn_ib_query_port(struct hl_aux_dev *aux_dev, u32 port,
-				struct hl_ib_port_attr *port_attr)
-{
-	struct hl_cn_device *hdev = HL_AUX2NIC(aux_dev);
-	struct hl_cn_properties *cn_prop;
-	struct hl_cn_asic_funcs *asic_funcs;
-	struct hl_cn_port *cn_port;
-
-	asic_funcs = hdev->asic_funcs;
-	cn_prop = &hdev->cn_props;
-	cn_port = &hdev->cn_ports[port];
-
-	port_attr->open = hl_cn_is_port_open(cn_port);
-	port_attr->link_up = cn_port->pcs_link;
-	port_attr->speed = cn_port->speed;
-	port_attr->max_msg_sz = asic_funcs->get_max_msg_sz(hdev);
-	port_attr->num_lanes = hdev->lanes_per_port;
-	port_attr->max_mtu = SZ_8K;
-	port_attr->swqe_size = cn_port->swqe_size;
-	port_attr->rwqe_size = cn_prop->rwqe_size;
-}
-
-static inline void parse_fw_ver(struct hl_cn_device *hdev, char *str, u32 *maj, u16 *min, u16 *sub)
-{
-	char *ver = strstr(str, "fw-");
-	int ret;
-
-	if (!ver)
-		goto failure;
-
-	ret = sscanf(ver, "fw-%d.%hu.%hu", maj, min, sub);
-	if (ret < 3) {
-failure:
-		dev_dbg(hdev->dev, "Failed to read version string\n");
-		*maj = *min = *sub = 0;
-	}
-}
-
-static void hl_cn_ib_query_device(struct hl_aux_dev *aux_dev, struct hl_ib_device_attr *dev_attr)
-{
-	struct hl_cn_device *hdev = HL_AUX2NIC(aux_dev);
-	struct hl_cn_properties *cn_props;
-	struct hl_ib_aux_data *aux_data;
-	u16 minor, sub_ver;
-	u32 major;
-
-	aux_data = aux_dev->aux_data;
-	cn_props = &hdev->cn_props;
-
-	if (hdev->cpucp_fw) {
-		parse_fw_ver(hdev, aux_data->fw_ver, &major, &minor, &sub_ver);
-		dev_attr->fw_ver = ((u64)major << 32) | ((u64)minor << 16) | sub_ver;
-	}
-
-	dev_attr->max_mr_size = aux_data->dram_size;
-
-	dev_attr->page_size_cap = PAGE_SIZE;
-
-	if (hdev->pdev) {
-		dev_attr->vendor_id = hdev->pdev->vendor;
-		dev_attr->vendor_part_id = hdev->pdev->device;
-		dev_attr->hw_ver = hdev->pdev->subsystem_device;
-	} else {
-		dev_attr->vendor_id = hdev->vendor_id;
-		dev_attr->vendor_part_id = hdev->pci_id;
-	}
-
-	/* TODO: SW-99351: handle QPs per port */
-	dev_attr->max_qp = cn_props->max_qps_num;
-
-	dev_attr->max_qp_wr = aux_data->max_num_of_wqes;
-	dev_attr->max_cqe = cn_props->user_cq_max_entries;
-
-	dev_attr->cqe_size = cn_props->cqe_size;
-	dev_attr->min_cq_entries = cn_props->user_cq_min_entries;
-}
-
-static void hl_cn_ib_set_ip_addr_encap(struct hl_aux_dev *aux_dev, u32 ip_addr, u32 port)
-{
-	struct hl_cn_device *hdev = HL_AUX2NIC(aux_dev);
-	struct hl_cn_asic_funcs *asic_funcs;
-	struct hl_cn_port *cn_port;
-	u32 encap_id;
-
-	asic_funcs = hdev->asic_funcs;
-	cn_port = &hdev->cn_ports[port];
-
-	asic_funcs->port_funcs->set_ip_addr_encap(cn_port, &encap_id, ip_addr);
-}
-
-static char *hl_cn_ib_qp_syndrome_to_str(struct hl_aux_dev *aux_dev, u32 syndrome)
-{
-	struct hl_cn_device *hdev = HL_AUX2NIC(aux_dev);
-	struct hl_cn_asic_funcs *asic_funcs;
-
-	asic_funcs = hdev->asic_funcs;
-
-	return asic_funcs->qp_syndrome_to_str(syndrome);
-}
-
-static int hl_cn_ib_verify_qp_id(struct hl_aux_dev *aux_dev, u32 qp_id, u32 port, u8 is_coll)
-{
-	struct hl_cn_asic_port_funcs *port_funcs;
-	struct hl_cn_port *cn_port;
-	struct hl_cn_device *hdev;
-	struct hl_cn_qp *qp;
-	int rc = 0;
-
-	hdev = HL_AUX2NIC(aux_dev);
-	port_funcs = hdev->asic_funcs->port_funcs;
-	cn_port = &hdev->cn_ports[port];
-
-	if (is_coll) {
-		hl_cn_cfg_lock_all(hdev);
-		qp = hl_cn_get_qp_from_coll_conn_id(cn_port, qp_id);
-	} else {
-		port_funcs->cfg_lock(cn_port);
-		qp = xa_load(&cn_port->qp_ids, qp_id);
-	}
-
-	if (IS_ERR_OR_NULL(qp)) {
-		dev_dbg(hdev->dev, "Failed to find matching QP for handle %d, port %d\n", qp_id,
-			port);
-		rc = -EINVAL;
-		goto cfg_unlock;
-	}
-
-	/* sanity test the port IDs */
-	if (qp->port != port) {
-		dev_dbg(hdev->dev, "QP port %d does not match requested port %d\n", qp->port, port);
-		rc = -EINVAL;
-		goto cfg_unlock;
-	}
-
-cfg_unlock:
-	if (is_coll)
-		hl_cn_cfg_unlock_all(hdev);
-	else
-		port_funcs->cfg_unlock(cn_port);
-
-	return rc;
-}
-
 static int hl_cn_en_aux_data_init(struct hl_cn_device *hdev)
 {
 	struct hl_cn_asic_funcs *asic_funcs = hdev->asic_funcs;
@@ -1085,131 +735,6 @@ static void hl_cn_en_aux_data_fini(struct hl_cn_device *hdev)
 	aux_data->mac_addr = NULL;
 }
 
-static int hl_cn_ib_aux_data_init(struct hl_cn_device *hdev)
-{
-	struct hl_ib_port_cnts_data *cnts_data;
-	struct hl_ib_aux_data *ib_aux_data;
-	struct hl_ib_aux_ops *ib_aux_ops;
-	struct hl_aux_dev *ib_aux_dev;
-	struct hl_cn_port *cn_port;
-	int rc, i;
-
-	ib_aux_dev = &hdev->ib_aux_dev;
-	ib_aux_dev->type = HL_AUX_DEV_IB;
-	ib_aux_data = ib_aux_dev->aux_data;
-	ib_aux_ops = ib_aux_dev->aux_ops;
-
-	ib_aux_data->pdev = hdev->pdev;
-	ib_aux_data->dev = hdev->dev;
-	ib_aux_data->fw_ver = hdev->fw_ver;
-	ib_aux_data->ports_mask = hdev->ports_mask;
-	ib_aux_data->ext_ports_mask = hdev->ext_ports_mask;
-	ib_aux_data->max_num_of_wqes = hdev->cn_props.max_hw_user_wqs_num;
-	ib_aux_data->max_num_of_ports = hdev->cn_props.max_num_of_ports;
-	ib_aux_data->pending_reset_long_timeout = hdev->pending_reset_long_timeout;
-	ib_aux_data->id = hdev->id;
-	ib_aux_data->dram_size = hdev->dram_size;
-	ib_aux_data->mixed_qp_wq_types = hdev->mixed_qp_wq_types;
-	ib_aux_data->umr_support = hdev->umr_support;
-
-	/* SIMULATOR CODE */
-	if (!hdev->pdev) {
-		ib_aux_data->sim_mac_addr = kcalloc(hdev->cn_props.max_num_of_ports,
-						    sizeof(*ib_aux_data->sim_mac_addr),
-						    GFP_KERNEL);
-		if (!ib_aux_data->sim_mac_addr)
-			return -ENOMEM;
-
-		for (i = 0; i < hdev->cn_props.max_num_of_ports; i++) {
-			if (!(ib_aux_data->ext_ports_mask & BIT(i)))
-				continue;
-
-			ib_aux_data->sim_mac_addr[i] = hdev->cpucp_info->mac_addrs[i].mac_addr;
-		}
-	}
-	/* END OF SIMULATOR CODE */
-
-	ib_aux_data->cnts_data = kcalloc(hdev->cn_props.max_num_of_ports,
-					 sizeof(*ib_aux_data->cnts_data), GFP_KERNEL);
-	if (!ib_aux_data->cnts_data) {
-		rc = -ENOMEM;
-		goto free_mac_addr;
-	}
-
-	for (i = 0; i < hdev->cn_props.max_num_of_ports; i++) {
-		if (!(ib_aux_data->ports_mask & BIT(i)))
-			continue;
-
-		cn_port = &hdev->cn_ports[i];
-		cnts_data = &ib_aux_data->cnts_data[i];
-
-		cnts_data->num = __hl_cn_get_cnts_num(cn_port);
-
-		cnts_data->names = kcalloc(cnts_data->num, HL_IB_CNT_NAME_LEN, GFP_KERNEL);
-		if (!cnts_data->names) {
-			rc = -ENOMEM;
-			goto free_cnts_data;
-		}
-
-		__hl_cn_get_cnts_names(cn_port, cnts_data->names, true);
-	}
-
-	/* set ib -> cn ops */
-	/* the following functions are used even if the IB verbs API is disabled */
-	ib_aux_ops->device_operational = hl_cn_device_operational;
-	ib_aux_ops->hw_access_lock = hl_cn_hw_access_lock;
-	ib_aux_ops->hw_access_unlock = hl_cn_hw_access_unlock;
-	ib_aux_ops->alloc_ucontext = hl_cn_ib_alloc_ucontext;
-	ib_aux_ops->dealloc_ucontext = hl_cn_ib_dealloc_ucontext;
-	ib_aux_ops->query_port = hl_cn_ib_query_port;
-	ib_aux_ops->query_device = hl_cn_ib_query_device;
-	ib_aux_ops->set_ip_addr_encap = hl_cn_ib_set_ip_addr_encap;
-	ib_aux_ops->qp_syndrome_to_str = hl_cn_ib_qp_syndrome_to_str;
-	ib_aux_ops->verify_qp_id = hl_cn_ib_verify_qp_id;
-	ib_aux_ops->get_cnts_values = hl_cn_get_cnts_values;
-
-	/* these functions are used only if the IB verbs API is enabled */
-	ib_aux_ops->cmd_ctrl = hl_cn_ib_cmd_ctrl;
-	ib_aux_ops->mmap = hl_cn_ib_mmap;
-
-	return 0;
-
-free_cnts_data:
-	for (--i; i >= 0; i--) {
-		if (!(ib_aux_data->ports_mask & BIT(i)))
-			continue;
-
-		kfree(ib_aux_data->cnts_data[i].names);
-	}
-	kfree(ib_aux_data->cnts_data);
-free_mac_addr:
-	if (!hdev->pdev)
-		kfree(ib_aux_data->sim_mac_addr);
-
-	return rc;
-}
-
-static void hl_cn_ib_aux_data_fini(struct hl_cn_device *hdev)
-{
-	struct hl_ib_aux_data *aux_data;
-	struct hl_aux_dev *aux_dev;
-	int i;
-
-	aux_dev = &hdev->ib_aux_dev;
-	aux_data = aux_dev->aux_data;
-
-	for (i = 0; i < hdev->cn_props.max_num_of_ports; i++) {
-		if (!(aux_data->ports_mask & BIT(i)))
-			continue;
-
-		kfree(aux_data->cnts_data[i].names);
-	}
-	kfree(aux_data->cnts_data);
-
-	if (!hdev->pdev)
-		kfree(aux_data->sim_mac_addr);
-}
-
 static void eth_adev_release(struct device *dev)
 {
 	struct hl_aux_dev *aux_dev = container_of(dev, struct hl_aux_dev, adev.dev);
@@ -1273,76 +798,6 @@ static void hl_cn_en_aux_drv_fini(struct hl_cn_device *hdev)
 	auxiliary_device_uninit(adev);
 
 	hl_cn_en_aux_data_fini(hdev);
-}
-
-static void ib_adev_release(struct device *dev)
-{
-	struct hl_aux_dev *aux_dev = container_of(dev, struct hl_aux_dev, adev.dev);
-	struct hl_cn_device *hdev;
-
-	hdev = container_of(aux_dev, struct hl_cn_device, ib_aux_dev);
-
-	hdev->is_ib_aux_dev_initialized = false;
-}
-
-static int hl_cn_ib_aux_drv_init(struct hl_cn_device *hdev)
-{
-	struct hl_aux_dev *aux_dev = &hdev->ib_aux_dev;
-	struct auxiliary_device *adev;
-	int rc;
-
-	if (!hdev->ib_support)
-		return 0;
-
-	rc = hl_cn_ib_aux_data_init(hdev);
-	if (rc) {
-		dev_err(hdev->dev, "IB aux data init failed\n");
-		return rc;
-	}
-
-	adev = &aux_dev->adev;
-	adev->id = hdev->id;
-	adev->name = "ib";
-	adev->dev.parent = hdev->dev;
-	adev->dev.release = ib_adev_release;
-
-	rc = auxiliary_device_init(adev);
-	if (rc) {
-		dev_err(hdev->dev, "ib auxiliary_device_init failed\n");
-		goto aux_data_free;
-	}
-
-	rc = auxiliary_device_add(adev);
-	if (rc) {
-		dev_err(hdev->dev, "ib auxiliary_device_add failed\n");
-		goto uninit_adev;
-	}
-
-	hdev->is_ib_aux_dev_initialized = true;
-
-	return 0;
-
-uninit_adev:
-	auxiliary_device_uninit(adev);
-aux_data_free:
-	hl_cn_ib_aux_data_fini(hdev);
-
-	return rc;
-}
-
-static void hl_cn_ib_aux_drv_fini(struct hl_cn_device *hdev)
-{
-	struct auxiliary_device *adev;
-
-	if (!hdev->ib_support || !hdev->is_ib_aux_dev_initialized)
-		return;
-
-	adev = &hdev->ib_aux_dev.adev;
-
-	auxiliary_device_delete(adev);
-	auxiliary_device_uninit(adev);
-
-	hl_cn_ib_aux_data_fini(hdev);
 }
 
 void hl_cn_internal_port_fini_locked(struct hl_cn_port *cn_port)
@@ -1888,12 +1343,6 @@ int hl_cn_dev_init(struct hl_cn_device *hdev)
 		goto en_aux_drv_fail;
 	}
 
-	rc = hl_cn_ib_aux_drv_init(hdev);
-	if (rc) {
-		dev_err(hdev->dev, "Failed to init IB driver\n");
-		goto ib_aux_drv_fail;
-	}
-
 	hl_cn_late_init(hdev);
 
 	hl_cn_debugfs_dev_init(hdev);
@@ -1902,8 +1351,6 @@ int hl_cn_dev_init(struct hl_cn_device *hdev)
 
 	return 0;
 
-ib_aux_drv_fail:
-	hl_cn_en_aux_drv_fini(hdev);
 en_aux_drv_fail:
 	hdev->operational = false;
 	hl_cn_mem_fini(hdev);
@@ -1938,7 +1385,6 @@ void hl_cn_dev_fini(struct hl_cn_device *hdev)
 
 	hl_cn_late_fini(hdev);
 
-	hl_cn_ib_aux_drv_fini(hdev);
 	/* must be called after MSI was disabled */
 	hl_cn_en_aux_drv_fini(hdev);
 	hl_cn_mem_fini(hdev);
@@ -2372,7 +1818,7 @@ static int set_req_qp_ctx(struct hl_cn_device *hdev, struct hl_cni_req_conn_ctx_
 		return -EINVAL;
 	}
 
-	if (!in->timer_granularity && !hl_cn_is_ibdev_opened(hdev))
+	if (!in->timer_granularity)
 		in->timer_granularity = NIC_TMR_TIMEOUT_DEFAULT_GRAN;
 
 	/* We must take rtnl_lock here prior to taking cfg_lock, as we may land into flow that
@@ -3075,69 +2521,6 @@ static void qps_destroy(struct hl_cn_device *hdev)
 	for (coll_conn_type = 0; coll_conn_type < HL_CN_COLL_CONN_TYPE_MAX; coll_conn_type++) {
 		xa_for_each(&hdev->coll_props[coll_conn_type].coll_qp_ids, qp_id, coll_qp)
 			dev_err_ratelimited(hdev->dev, "Collective QP %ld is still alive\n", qp_id);
-	}
-
-	hl_cn_cfg_unlock_all(hdev);
-}
-
-static void qps_halt(struct hl_cn_ctx *ctx)
-{
-	struct hl_cn_qpc_drain_attr drain_attr = { .wait_for_idle = false, };
-	struct hl_cn_asic_port_funcs *port_funcs;
-	struct hl_cn_device *hdev = ctx->hdev;
-	struct hl_cn_coll_qp *coll_qp;
-	struct hl_cn_port *cn_port;
-	unsigned long qp_id = 0;
-	int i, coll_conn_type;
-	struct hl_cn_qp *qp;
-
-	port_funcs = hdev->asic_funcs->port_funcs;
-
-	/* destroy the QPs */
-	for (i = 0; i < hdev->cn_props.max_num_of_ports; i++) {
-		if (!(hdev->ports_mask & BIT(i)))
-			continue;
-
-		cn_port = &hdev->cn_ports[i];
-
-		/* protect against destroy_qp occurring in parallel */
-		port_funcs->cfg_lock(cn_port);
-
-		xa_for_each(&cn_port->qp_ids, qp_id, qp) {
-			if (IS_ERR_OR_NULL(qp) || qp->ctx->user_asid != ctx->user_asid)
-				continue;
-
-			/* drain the Req QP now in order to make sure that accesses to the WQ will
-			 * not be performed from this point on.
-			 */
-			hl_cn_qp_modify(cn_port, qp, CN_QP_STATE_SQD, &drain_attr);
-		}
-
-		port_funcs->cfg_unlock(cn_port);
-	}
-
-	hl_cn_cfg_lock_all(hdev);
-
-	for (coll_conn_type = 0; coll_conn_type < HL_CN_COLL_CONN_TYPE_MAX; coll_conn_type++) {
-		xa_for_each(&hdev->coll_props[coll_conn_type].coll_qp_ids, qp_id, coll_qp) {
-			if (IS_ERR_OR_NULL(coll_qp))
-				continue;
-
-			for (i = 0; i < hdev->cn_props.max_num_of_ports; i++) {
-				if (!(hdev->ports_mask & BIT(i)))
-					continue;
-
-				qp = coll_qp->qps_array[i];
-
-				if (qp->ctx->user_asid != ctx->user_asid)
-					break;
-
-				/* drain the Req QP now in order to make sure that accesses to the
-				 * WQ will not be performed from this point on.
-				 */
-				hl_cn_qp_modify(qp->cn_port, qp, CN_QP_STATE_SQD, &drain_attr);
-			}
-		}
 	}
 
 	hl_cn_cfg_unlock_all(hdev);
@@ -4780,7 +4163,7 @@ static int hl_cn_get_port_statistics(struct hl_aux_dev *aux_dev, u32 port,
 		goto out;
 	}
 
-	__hl_cn_get_cnts_names(cn_port, drv_str_buf, false);
+	__hl_cn_get_cnts_names(cn_port, drv_str_buf);
 	__hl_cn_get_cnts_values(cn_port, drv_val_buf);
 
 	rc = copy_to_user(usr_str_buf, drv_str_buf, HL_CNI_STAT_STR_LEN * num_of_stat);
@@ -5157,32 +4540,6 @@ static int __hl_cn_control(struct hl_cn_device *hdev, u32 op, void *input, void 
 	return rc;
 }
 
-static int hl_cn_ib_cmd_ctrl(struct hl_aux_dev *aux_dev, void *cn_ib_ctx, u32 op, void *input,
-			     void *output)
-{
-	struct hl_cn_device *hdev = HL_AUX2NIC(aux_dev);
-	struct hl_cn_ctx *ctx = cn_ib_ctx;
-	int rc;
-
-	mutex_lock(&ctx->lock);
-
-	do
-		rc = __hl_cn_control(hdev, op, input, output, ctx);
-	while (rc == -EAGAIN);
-
-	mutex_unlock(&ctx->lock);
-
-	return rc;
-}
-
-static int hl_cn_ib_mmap(struct hl_aux_dev *ib_aux_dev, void *cn_ib_ctx,
-			 struct vm_area_struct *vma)
-{
-	struct hl_cn_device *hdev = HL_AUX2NIC(ib_aux_dev);
-
-	return hdev->asic_funcs->user_mmap(hdev, cn_ib_ctx, vma);
-}
-
 static int hl_cn_cmd_control(struct hl_aux_dev *aux_dev, u32 op, void *input, void *output,
 			     u32 asid)
 {
@@ -5293,43 +4650,6 @@ void hl_cn_ctx_fini(struct hl_aux_dev *aux_dev, u32 asid)
 	hdev->ctx = NULL;
 	mutex_destroy(&ctx->lock);
 	kfree(ctx);
-}
-
-static void dispatch_fatal_ib_event(struct hl_cn_ctx *ctx)
-{
-	struct hl_aux_dev *aux_dev = &ctx->hdev->ib_aux_dev;
-	struct hl_ib_aux_ops *aux_ops = aux_dev->aux_ops;
-
-	if (aux_ops->dispatch_fatal_event)
-		aux_ops->dispatch_fatal_event(aux_dev, ctx->asid);
-}
-
-static void hl_cn_ctx_kill(struct hl_aux_dev *aux_dev, void *cn_ctx)
-{
-	struct hl_cn_ctx *ctx = cn_ctx;
-	bool should_destroy;
-
-	mutex_lock(&ctx->lock);
-
-	/* We should destroy a context here only if it was already deallocated. Otherwise, we should
-	 * halt the QPs from accessing the killed VM and notify the user to close its IB context.
-	 * Then the context will be destroyed as part of dealloc_ucontext().
-	 */
-	if (ctx->deallocated) {
-		should_destroy = true;
-	} else {
-		qps_halt(ctx);
-		dispatch_fatal_ib_event(ctx);
-		ctx->killed = true;
-		should_destroy = false;
-	}
-
-	mutex_unlock(&ctx->lock);
-
-	if (should_destroy) {
-		mutex_destroy(&ctx->lock);
-		kfree(ctx);
-	}
 }
 
 int hl_cn_alloc_ring(struct hl_cn_device *hdev, struct hl_cn_ring *ring, int elem_size, int count)
@@ -5751,8 +5071,6 @@ static void hl_cn_sw_fini(struct hl_cn_device *hdev)
 
 	asic_funcs->sw_fini(hdev);
 
-	kfree(hdev->ib_aux_dev.aux_data);
-	kfree(hdev->ib_aux_dev.aux_ops);
 	kfree(hdev->en_aux_dev.aux_data);
 	kfree(hdev->en_aux_dev.aux_ops);
 	kfree(hdev->mac_lane_remap);
@@ -5769,9 +5087,7 @@ static int hl_cn_sw_init(struct hl_cn_device *hdev)
 	int rc, i, macro_cnt = 0, port_cnt = 0;
 	struct hl_cn_port *cn_port, *cn_ports;
 	struct hl_en_aux_data *en_aux_data;
-	struct hl_ib_aux_data *ib_aux_data;
 	struct hl_en_aux_ops *en_aux_ops;
-	struct hl_ib_aux_ops *ib_aux_ops;
 	struct hl_cn_ber_info *ber_info;
 	struct hl_cn_tx_taps *tx_taps;
 	u32 *mac_lane_remap;
@@ -5821,22 +5137,8 @@ static int hl_cn_sw_init(struct hl_cn_device *hdev)
 		goto en_aux_ops_alloc_fail;
 	}
 
-	ib_aux_data = kzalloc(sizeof(*ib_aux_data), GFP_KERNEL);
-	if (!ib_aux_data) {
-		rc = -ENOMEM;
-		goto ib_aux_data_alloc_fail;
-	}
-
-	ib_aux_ops = kzalloc(sizeof(*ib_aux_ops), GFP_KERNEL);
-	if (!ib_aux_ops) {
-		rc = -ENOMEM;
-		goto ib_aux_ops_alloc_fail;
-	}
-
 	hdev->en_aux_dev.aux_data = en_aux_data;
 	hdev->en_aux_dev.aux_ops = en_aux_ops;
-	hdev->ib_aux_dev.aux_data = ib_aux_data;
-	hdev->ib_aux_dev.aux_ops = ib_aux_ops;
 
 	hdev->phy_tx_taps = tx_taps;
 	hdev->phy_ber_info = ber_info;
@@ -5904,10 +5206,6 @@ macro_init_fail:
 
 	asic_funcs->sw_fini(hdev);
 sw_init_fail:
-	kfree(ib_aux_ops);
-ib_aux_ops_alloc_fail:
-	kfree(ib_aux_data);
-ib_aux_data_alloc_fail:
 	kfree(en_aux_ops);
 en_aux_ops_alloc_fail:
 	kfree(en_aux_data);
@@ -5940,7 +5238,6 @@ static void hl_cn_late_init(struct hl_cn_device *hdev)
 	aux_ops->synchronize_irqs = hl_cn_synchronize_irqs;
 	aux_ops->ctx_init = hl_cn_ctx_init;
 	aux_ops->ctx_fini = hl_cn_ctx_fini;
-	aux_ops->ctx_kill = hl_cn_ctx_kill;
 	aux_ops->send_port_cpucp_status = hl_cn_send_port_cpucp_status;
 	aux_ops->mmap = hl_cn_mmap;
 	aux_ops->get_port_state = hl_cn_get_port_link_state;
@@ -5965,7 +5262,6 @@ static void hl_cn_late_fini(struct hl_cn_device *hdev)
 	aux_ops->synchronize_irqs = NULL;
 	aux_ops->ctx_init = NULL;
 	aux_ops->ctx_fini = NULL;
-	aux_ops->ctx_kill = NULL;
 	aux_ops->send_port_cpucp_status = NULL;
 	aux_ops->mmap = NULL;
 	aux_ops->get_port_state = NULL;
@@ -6607,9 +5903,6 @@ int hl_cn_eq_dispatcher_unregister_db(struct hl_cn_port *cn_port, u32 dbn)
 static int __hl_cn_eq_dispatcher_enqueue(struct hl_cn_port *cn_port, struct hl_cn_ev_dq *dq,
 					 const struct hl_cn_eqe *eqe)
 {
-	struct hl_aux_dev *aux_dev = &cn_port->hdev->ib_aux_dev;
-	struct hl_ib_aux_ops *aux_ops = aux_dev->aux_ops;
-
 	if (hl_cn_eq_dispatcher_is_full(dq)) {
 		dq->overflow++;
 		return -ENOSPC;
@@ -6618,10 +5911,6 @@ static int __hl_cn_eq_dispatcher_enqueue(struct hl_cn_port *cn_port, struct hl_c
 	memcpy(&dq->buf.events[dq->buf.head], eqe, min(sizeof(*eqe), sizeof(dq->buf.events[0])));
 	dq->buf.head = (dq->buf.head + 1) & (NIC_EQ_INFO_BUF_SIZE - 1);
 	dq->buf.events_count++;
-
-	/* If IB device exist, call work scheduler for hlib to poll eq */
-	if (aux_ops->eqe_work_schd)
-		aux_ops->eqe_work_schd(aux_dev, cn_port->port);
 
 	return 0;
 }
