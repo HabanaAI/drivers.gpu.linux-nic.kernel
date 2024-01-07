@@ -396,21 +396,11 @@ struct hl_cni_cq_poll_wait_out {
  * enum hl_nic_mem_type - NIC WQ memory allocation type
  * @HL_CNI_USER_WQ_SEND: Allocate memory for the user send WQ array
  * @HL_CNI_USER_WQ_RECV: Allocate memory for the user receive WQ array
- * @HL_CNI_USER_COLL_WQ_SEND: Allocate memory for the user collective send WQ array
- * @HL_CNI_USER_COLL_WQ_RECV: Allocate memory for the user collective receive WQ array
- * @HL_CNI_USER_COLL_SCALE_OUT_WQ_SEND: Allocate memory for the user scale-out collective send WQ
- *                                      array
- * @HL_CNI_USER_COLL_SCALE_OUT_WQ_RECV: Allocate memory for the user scale-out collective receive
- *                                      WQ array
  * @HL_CNI_USER_WQ_TYPE_MAX: number of values in enum
  */
 enum hl_nic_mem_type {
 	HL_CNI_USER_WQ_SEND,
 	HL_CNI_USER_WQ_RECV,
-	HL_CNI_USER_COLL_WQ_SEND,
-	HL_CNI_USER_COLL_WQ_RECV,
-	HL_CNI_USER_COLL_SCALE_OUT_WQ_SEND,
-	HL_CNI_USER_COLL_SCALE_OUT_WQ_RECV,
 	HL_CNI_USER_WQ_TYPE_MAX
 };
 
@@ -564,26 +554,6 @@ struct hl_cni_user_cq_id_unset_in {
 };
 
 /**
- * struct hl_cni_alloc_coll_conn_in - NIC ioctl opcode HL_CNI_OP_ALLOC_COLL_CONN in param,
- *                                    relevant for Gaudi3 (or higher).
- * @is_scale_out: Is this collective connection for scale out.
- */
-struct hl_cni_alloc_coll_conn_in {
-	__u8 is_scale_out;
-	__u8 pad[7];
-};
-
-/**
- * struct hl_cni_alloc_coll_conn_out - NIC ioctl opcode HL_CNI_OP_ALLOC_COLL_CONN out param,
- *                                     relevant for Gaudi3 (or higher).
- * @conn_id: Connection ID.
- */
-struct hl_cni_alloc_coll_conn_out {
-	__u32 conn_id;
-	__u32 pad;
-};
-
-/**
  * struct hl_cni_dump_qp_in - NIC ioctl opcode HL_CNI_OP_DUMP_QP in param.
  * @user_buf_address: Pre-allocated user buffer address to hold the dump output.
  * @user_buf_size: Size of the user buffer.
@@ -648,15 +618,6 @@ struct hl_cni_get_user_app_params_in {
  * @speed: port speed in Mbps.
  * @nic_macro_idx: macro index of this specific port.
  * @nic_phys_port_idx: physical port index (AKA lane) of this specific port.
- * @max_num_of_scale_out_coll_qps: Number of scale-out collective QPs that are supported by the
- *                                 driver. User must allocate enough room for his collective
- *                                 work-queues according to this number.
- * @max_num_of_coll_qps: Number of collective QPs that are supported by the driver. User must
- *                       allocate enough room for his collective work-queues according to this
- *                       number.
- * @coll_qps_offset: Specific port collective QPs index offset.
- * @base_scale_out_coll_qp_idx: The first scale-out collective QP id (common for all ports).
- * @base_coll_qp_idx: The first collective QP id (common for all ports).
  */
 struct hl_cni_get_user_app_params_out {
 	__u32 max_num_of_qps;
@@ -670,12 +631,7 @@ struct hl_cni_get_user_app_params_out {
 	__u32 speed;
 	__u8 nic_macro_idx;
 	__u8 nic_phys_port_idx;
-	__u8 pad[2];
-	__u32 max_num_of_scale_out_coll_qps;
-	__u32 max_num_of_coll_qps;
-	__u32 coll_qps_offset;
-	__u32 base_scale_out_coll_qp_idx;
-	__u32 base_coll_qp_idx;
+	__u8 pad[6];
 };
 
 /**
@@ -699,26 +655,12 @@ struct hl_cni_alloc_user_db_fifo_out {
 
 /**
  * enum hl_nic_db_fifo_type - NIC users FIFO modes of operation.
- * @HL_CNI_DB_FIFO_TYPE_DB: (Gaudi2 and above) mode for direct user door-bell submit.
- * @HL_CNI_DB_FIFO_TYPE_CC: (Gaudi2 and above) mode for congestion control.
- * @HL_CNI_DB_FIFO_TYPE_COLL_OPS_SHORT: (Gaudi3 and above) mode for short collective operations.
- * @HL_CNI_DB_FIFO_TYPE_COLL_OPS_LONG: (Gaudi3 and above) mode for long collective operations.
- * @HL_CNI_DB_FIFO_TYPE_DWQ_LIN: (Gaudi3 and above) mode for linear direct WQE submit.
- * @HL_CNI_DB_FIFO_TYPE_DWQ_MS: (Gaudi3 and above) mode for multi-stride WQE submit.
- * @HL_CNI_DB_FIFO_TYPE_COLL_DIR_OPS_SHORT: (Gaudi3 and above) mode for direct short collective
- *                                                             operations.
- * @HL_CNI_DB_FIFO_TYPE_COLL_DIR_OPS_LONG: (Gaudi3 and above) mode for direct long collective
- *                                                             operations.
+ * @HL_CNI_DB_FIFO_TYPE_DB: mode for direct user door-bell submit.
+ * @HL_CNI_DB_FIFO_TYPE_CC: mode for congestion control.
  */
 enum hl_nic_db_fifo_type {
 	HL_CNI_DB_FIFO_TYPE_DB = 0,
 	HL_CNI_DB_FIFO_TYPE_CC,
-	HL_CNI_DB_FIFO_TYPE_COLL_OPS_SHORT,
-	HL_CNI_DB_FIFO_TYPE_COLL_OPS_LONG,
-	HL_CNI_DB_FIFO_TYPE_DWQ_LIN,
-	HL_CNI_DB_FIFO_TYPE_DWQ_MS,
-	HL_CNI_DB_FIFO_TYPE_COLL_DIR_OPS_SHORT,
-	HL_CNI_DB_FIFO_TYPE_COLL_DIR_OPS_LONG,
 };
 
 /**
@@ -726,19 +668,12 @@ enum hl_nic_db_fifo_type {
  * @port: NIC port ID
  * @id: NIC DB-FIFO ID
  * @mode: represents desired mode of operation for provided FIFO, according to hl_nic_db_fifo_type
- * @dir_dup_ports_mask: ports for which the hw should duplicate the direct patcher descriptor
- *                                                                              (gaudi3 & above)
- * @base_sob_addr: base address of the sync object (gaudi3 & above)
- * @num_sobs: number of sync objects (gaudi3 & above)
  */
 struct hl_cni_user_db_fifo_set_in {
 	__u32 port;
 	__u32 id;
 	__u8 mode;
-	__u8 dir_dup_ports_mask;
-	__u8 pad[6];
-	__u32 base_sob_addr;
-	__u32 num_sobs;
+	__u8 pad[7];
 };
 
 /**
@@ -934,26 +869,26 @@ struct hl_cni_user_ccq_unset_in {
 #define HL_CNI_OP_SET_RES_CONN_CTX		2
 /* Opcode to destroy a connection */
 #define HL_CNI_OP_DESTROY_CONN			3
-/* Opcode to create a CQ */
-#define HL_CNI_OP_CQ_CREATE			4
-/* Opcode to destroy a CQ */
-#define HL_CNI_OP_CQ_DESTROY			5
-/* Unused, kept for backward compatibility */
-#define HL_CNI_OP_CQ_WAIT			6
-/* Unused, kept for backward compatibility */
-#define HL_CNI_OP_CQ_POLL			7
-/* Unused, kept for backward compatibility */
-#define HL_CNI_OP_CQ_UPDATE_CONSUMED_CQES	8
+/* Reserved opcode */
+#define HL_CNI_OP_RESERVED4			4
+/* Reserved opcode */
+#define HL_CNI_OP_RESERVED5			5
+/* Reserved opcode */
+#define HL_CNI_OP_RESERVED6			6
+/* Reserved opcode */
+#define HL_CNI_OP_RESERVED7			7
+/* Reserved opcode */
+#define HL_CNI_OP_RESERVED8			8
 /* Opcode to set a user WQ array */
 #define HL_CNI_OP_USER_WQ_SET			9
 /* Opcode to unset a user WQ array */
 #define HL_CNI_OP_USER_WQ_UNSET			10
-/* Unused, kept for backward compatibility */
+/* Opcode to set user CQ (deprecated) */
 #define HL_CNI_OP_USER_CQ_SET			11
-/* Unused, kept for backward compatibility */
+/* Opcode to unset user CQ (deprecated) */
 #define HL_CNI_OP_USER_CQ_UNSET			12
-/* Unused, kept for backward compatibility */
-#define HL_CNI_OP_USER_CQ_UPDATE_CI		13
+/* Reserved opcode */
+#define HL_CNI_OP_RESERVED13			13
 /* Opcode to allocate a CQ */
 #define HL_CNI_OP_ALLOC_USER_CQ_ID		14
 /* Opcode to set specific user-application parameters */
@@ -982,8 +917,8 @@ struct hl_cni_user_ccq_unset_in {
 #define HL_CNI_OP_USER_CQ_ID_SET		26
 /* Opcode to unset user CQ by ID */
 #define HL_CNI_OP_USER_CQ_ID_UNSET		27
-/* Opcode reserved */
-#define HL_CNI_OP_RESERVED0			28
+/* Reserved opcode */
+#define HL_CNI_OP_RESERVED28			28
 /* Opcode to dump the context of a QP */
 #define HL_CNI_OP_DUMP_QP			29
 

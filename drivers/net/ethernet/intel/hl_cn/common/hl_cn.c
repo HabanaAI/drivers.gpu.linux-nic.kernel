@@ -15,7 +15,6 @@
 #define NIC_PCS_FAIL_TIME_FRAME_SEC	(60 * 5) /* 5 minutes */
 #define NIC_PCS_FAIL_THRESHOLD		8
 #define NIC_MIN_WQS_PER_PORT		2
-#define NIC_MIN_COLL_WQS_PER_PORT	1
 
 #define NIC_SEQ_RESETS_TIMEOUT_MS	15000 /* 15 seconds */
 #define NIC_MAX_SEQ_RESETS		3
@@ -1459,50 +1458,6 @@ void hl_cn_cfg_unlock_all(struct hl_cn_device *hdev)
 	return cfg_lock_unlock_all(hdev, false);
 }
 
-/* This function must be called after taking cfg_lock for all the ports */
-static struct hl_cn_coll_qp *get_coll_qp_from_conn_id(struct hl_cn_port *cn_port, u32 conn_id)
-{
-	struct hl_cn_asic_port_funcs *port_funcs;
-	u32 coll_conn_id, coll_conn_type;
-	struct hl_cn_coll_qp *coll_qp;
-	struct hl_cn_device *hdev;
-
-	hdev = cn_port->hdev;
-	port_funcs = hdev->asic_funcs->port_funcs;
-
-	coll_conn_type = (conn_id >= cn_port->scale_out_coll_qp_idx_offset) ?
-			 HL_CN_COLL_CONN_TYPE_SCALE_OUT : HL_CN_COLL_CONN_TYPE_NON_SCALE_OUT;
-
-	coll_conn_id = conn_id - port_funcs->get_coll_qps_offset(cn_port);
-
-	coll_qp = xa_load(&hdev->coll_props[coll_conn_type].coll_qp_ids, coll_conn_id);
-
-	return coll_qp;
-}
-
-/* This function must be called after taking cfg_lock for all the ports */
-struct hl_cn_qp *hl_cn_get_qp_from_coll_conn_id(struct hl_cn_port *cn_port, u32 conn_id)
-{
-	struct hl_cn_device *hdev = cn_port->hdev;
-	struct hl_cn_coll_qp *coll_qp;
-	u32 port = cn_port->port;
-
-	coll_qp = get_coll_qp_from_conn_id(cn_port, conn_id);
-	if (IS_ERR_OR_NULL(coll_qp)) {
-		dev_dbg(hdev->dev,
-			"Failed to find matching collective QP for conn_id %u, port %u\n", conn_id,
-			port);
-		return NULL;
-	}
-
-	return coll_qp->qps_array[port];
-}
-
-bool hl_cn_is_scale_out_coll_type(u32 coll_conn_type)
-{
-	return coll_conn_type == HL_CN_COLL_CONN_TYPE_SCALE_OUT;
-}
-
 static void hl_cn_get_qp_id_range(struct hl_cn_port *cn_port, u32 *min_id, u32 *max_id)
 {
 	struct hl_cn_device *hdev = cn_port->hdev;
@@ -1532,16 +1487,10 @@ static void hl_cn_qp_do_release(struct hl_cn_qp *qp)
 
 	port_funcs->qp_pre_destroy(qp);
 
-	if (qp->is_coll) {
-		struct hl_cn_coll_qp *coll_qp = get_coll_qp_from_conn_id(cn_port, qp->qp_id);
-
-		coll_qp->qps_array[cn_port->port] = NULL;
-	} else {
-		/* QP was found before, hence use xa_store to replace the pointer but don't release
-		 * index. xa_store should not fail in such scenario.
-		 */
-		xa_store(&qp->cn_port->qp_ids, qp->qp_id, NULL, GFP_KERNEL);
-	}
+	/* QP was found before, hence use xa_store to replace the pointer but don't release index.
+	 * xa_store should not fail in such scenario.
+	 */
+	xa_store(&qp->cn_port->qp_ids, qp->qp_id, NULL, GFP_KERNEL);
 
 	/* drain the Req QP now in order to make sure that accesses to the WQ will not
 	 * be performed from this point on.
@@ -1647,24 +1596,9 @@ error_exit:
 	return rc;
 }
 
-u32 hl_cn_get_wq_array_type(bool is_send, bool is_coll, bool is_scale_out_conn)
+u32 hl_cn_get_wq_array_type(bool is_send)
 {
-	u32 type;
-
-	if (is_send)
-		if (is_coll)
-			type = is_scale_out_conn ? HL_CNI_USER_COLL_SCALE_OUT_WQ_SEND :
-			       HL_CNI_USER_COLL_WQ_SEND;
-		else
-			type = HL_CNI_USER_WQ_SEND;
-	else
-		if (is_coll)
-			type = is_scale_out_conn ? HL_CNI_USER_COLL_SCALE_OUT_WQ_RECV :
-			       HL_CNI_USER_COLL_WQ_RECV;
-		else
-			type = HL_CNI_USER_WQ_RECV;
-
-	return type;
+	return is_send ? HL_CNI_USER_WQ_SEND : HL_CNI_USER_WQ_RECV;
 }
 
 static int alloc_and_map_wq(struct hl_cn_port *cn_port, struct hl_cn_qp *qp, u32 n_wq, bool is_swq)
@@ -1673,7 +1607,6 @@ static int alloc_and_map_wq(struct hl_cn_port *cn_port, struct hl_cn_qp *qp, u32
 	struct hl_cn_wq_array_properties *wq_arr_props;
 	struct hl_cn_mem_data mem_data = {};
 	struct hl_cn_properties *cn_props;
-	bool is_coll, is_scale_out_conn;
 	struct hl_cn_device *hdev;
 	struct hl_cn_mem_buf *buf;
 	u64 wq_arr_size, wq_size;
@@ -1682,18 +1615,11 @@ static int alloc_and_map_wq(struct hl_cn_port *cn_port, struct hl_cn_qp *qp, u32
 	hdev = cn_port->hdev;
 	cn_props = &hdev->cn_props;
 
-	is_coll = qp->is_coll;
-	is_scale_out_conn = hl_cn_is_scale_out_coll_type(qp->coll_conn_type);
-
-	if (is_coll)
-		qp_idx_offset = is_scale_out_conn ? cn_port->scale_out_coll_qp_idx_offset :
-				cn_port->coll_qp_idx_offset;
-	else
-		qp_idx_offset = cn_port->qp_idx_offset;
+	qp_idx_offset = cn_port->qp_idx_offset;
 
 	wq_idx = qp->qp_id - qp_idx_offset;
 
-	wq_arr_type = hl_cn_get_wq_array_type(is_swq, is_coll, is_scale_out_conn);
+	wq_arr_type = hl_cn_get_wq_array_type(is_swq);
 	wq_arr_props = &cn_port->wq_arr_props[wq_arr_type];
 	wqe_size = is_swq ? cn_port->swqe_size : cn_props->rwqe_size;
 
@@ -1781,7 +1707,6 @@ static int set_req_qp_ctx(struct hl_cn_device *hdev, struct hl_cni_req_conn_ctx_
 	u32 wq_size, port, max_wq_size;
 	struct hl_cn_port *cn_port;
 	struct hl_cn_qp *qp;
-	bool is_coll_conn;
 	int rc, i;
 
 	if (!in) {
@@ -1810,8 +1735,6 @@ static int set_req_qp_ctx(struct hl_cn_device *hdev, struct hl_cni_req_conn_ctx_
 	port_funcs = asic_funcs->port_funcs;
 	cn_port = &hdev->cn_ports[port];
 
-	is_coll_conn = asic_funcs->is_coll_conn_id(hdev, in->conn_id);
-
 	if (in->timer_granularity > NIC_TMR_TIMEOUT_MAX_GRAN) {
 		dev_err(hdev->dev,
 			"timer granularity %d is not supported\n", in->timer_granularity);
@@ -1828,27 +1751,8 @@ static int set_req_qp_ctx(struct hl_cn_device *hdev, struct hl_cni_req_conn_ctx_
 	 */
 	rtnl_lock();
 
-	if (is_coll_conn) {
-		hl_cn_cfg_lock_all(hdev);
-
-		/* For collective QPs we check that set_app_params was called for this port here
-		 * and not in alloc_coll_qp.
-		 * The reason is that alloc_coll_qp is being called for all the ports even though
-		 * some of the ports are not necessarily part of the collective group.
-		 */
-		if (!cn_port->set_app_params) {
-			dev_dbg(hdev->dev,
-				"Failed to set requester for conn_id %u, set_app_params wasn't called yet, port %d\n",
-				in->conn_id, port);
-			rc = -EPERM;
-			goto cfg_unlock;
-		}
-
-		qp = hl_cn_get_qp_from_coll_conn_id(cn_port, in->conn_id);
-	} else {
-		port_funcs->cfg_lock(cn_port);
-		qp = xa_load(&cn_port->qp_ids, in->conn_id);
-	}
+	port_funcs->cfg_lock(cn_port);
+	qp = xa_load(&cn_port->qp_ids, in->conn_id);
 
 	if (IS_ERR_OR_NULL(qp)) {
 		dev_dbg(hdev->dev, "Failed to find matching QP for handle %d, port %d\n",
@@ -1895,8 +1799,7 @@ static int set_req_qp_ctx(struct hl_cn_device *hdev, struct hl_cni_req_conn_ctx_
 	}
 
 	/* verify that size does not exceed wq_array size */
-	max_wq_size = qp->is_coll ? hdev->coll_props[qp->coll_conn_type].num_of_coll_wq_entries :
-		      cn_port->num_of_wq_entries;
+	max_wq_size = cn_port->num_of_wq_entries;
 
 	if (wq_size > max_wq_size) {
 		dev_dbg(hdev->dev,
@@ -1906,15 +1809,8 @@ static int set_req_qp_ctx(struct hl_cn_device *hdev, struct hl_cni_req_conn_ctx_
 		goto cfg_unlock;
 	}
 
-	if (qp->is_coll) {
-		struct hl_cn_coll_properties *coll_props = &hdev->coll_props[qp->coll_conn_type];
-
-		swq_arr_props = &cn_port->wq_arr_props[coll_props->swq_type];
-		rwq_arr_props = &cn_port->wq_arr_props[coll_props->rwq_type];
-	} else {
-		swq_arr_props = &cn_port->wq_arr_props[HL_CNI_USER_WQ_SEND];
-		rwq_arr_props = &cn_port->wq_arr_props[HL_CNI_USER_WQ_RECV];
-	}
+	swq_arr_props = &cn_port->wq_arr_props[HL_CNI_USER_WQ_SEND];
+	rwq_arr_props = &cn_port->wq_arr_props[HL_CNI_USER_WQ_RECV];
 
 	if (!swq_arr_props->on_device_mem) {
 		rc = alloc_and_map_wq(cn_port, qp, wq_size, true);
@@ -1938,10 +1834,7 @@ static int set_req_qp_ctx(struct hl_cn_device *hdev, struct hl_cni_req_conn_ctx_
 	if (rc)
 		goto err_free_rwq;
 
-	if (is_coll_conn)
-		hl_cn_cfg_unlock_all(hdev);
-	else
-		port_funcs->cfg_unlock(cn_port);
+	port_funcs->cfg_unlock(cn_port);
 
 	rtnl_unlock();
 
@@ -1974,10 +1867,7 @@ err_free_swq:
 		}
 	}
 cfg_unlock:
-	if (is_coll_conn)
-		hl_cn_cfg_unlock_all(hdev);
-	else
-		port_funcs->cfg_unlock(cn_port);
+	port_funcs->cfg_unlock(cn_port);
 
 	rtnl_unlock();
 
@@ -1991,7 +1881,6 @@ static int set_res_qp_ctx(struct hl_cn_device *hdev, struct hl_cni_res_conn_ctx_
 	struct hl_cn_asic_funcs *asic_funcs;
 	struct hl_cn_port *cn_port;
 	struct hl_cn_qp *qp;
-	bool is_coll_conn;
 	int rc, i;
 	u32 port;
 
@@ -2016,8 +1905,6 @@ static int set_res_qp_ctx(struct hl_cn_device *hdev, struct hl_cni_res_conn_ctx_
 	port_funcs = asic_funcs->port_funcs;
 	cn_port = &hdev->cn_ports[port];
 
-	is_coll_conn = asic_funcs->is_coll_conn_id(hdev, in->conn_id);
-
 	/* We must take rtnl_lock here prior to taking cfg_lock, as we may land into flow that
 	 * extracts the IP port and that can cause a deadlock in case an operation from the
 	 * net subsystem that requires the cfg_lock is executed at the same time. As such operation
@@ -2025,27 +1912,8 @@ static int set_res_qp_ctx(struct hl_cn_device *hdev, struct hl_cni_res_conn_ctx_
 	 */
 	rtnl_lock();
 
-	if (is_coll_conn) {
-		hl_cn_cfg_lock_all(hdev);
-
-		/* For collective QPs we check that set_app_params was called for this port here
-		 * and not in alloc_coll_qp.
-		 * The reason is that alloc_coll_qp is being called for all the ports even though
-		 * some of the ports are not necessarily part of the collective group.
-		 */
-		if (!cn_port->set_app_params) {
-			dev_dbg(hdev->dev,
-				"Failed to set responder for conn_id %u, set_app_params wasn't called yet, port %d\n",
-				in->conn_id, port);
-			rc = -EPERM;
-			goto unlock_cfg;
-		}
-
-		qp = hl_cn_get_qp_from_coll_conn_id(cn_port, in->conn_id);
-	} else {
-		port_funcs->cfg_lock(cn_port);
-		qp = xa_load(&cn_port->qp_ids, in->conn_id);
-	}
+	port_funcs->cfg_lock(cn_port);
+	qp = xa_load(&cn_port->qp_ids, in->conn_id);
 
 	if (IS_ERR_OR_NULL(qp)) {
 		dev_dbg(hdev->dev, "Failed to find matching QP for handle %d, port %d\n",
@@ -2077,7 +1945,7 @@ static int set_res_qp_ctx(struct hl_cn_device *hdev, struct hl_cni_res_conn_ctx_
 	if (qp->port != port) {
 		dev_dbg(hdev->dev, "QP port %d does not match requested port %d\n", qp->port, port);
 		rc = -EINVAL;
-		goto unregister_coll_qp;
+		goto unlock_cfg;
 	}
 
 	qp->local_key = in->local_key;
@@ -2086,40 +1954,20 @@ static int set_res_qp_ctx(struct hl_cn_device *hdev, struct hl_cni_res_conn_ctx_
 	if (qp->curr_state == CN_QP_STATE_RESET) {
 		rc = hl_cn_qp_modify(cn_port, qp, CN_QP_STATE_INIT, NULL);
 		if (rc)
-			goto unregister_coll_qp;
-
-		if (is_coll_conn) {
-			struct hl_cn_coll_qp *coll_qp = get_coll_qp_from_conn_id(cn_port,
-										 qp->qp_id);
-
-			atomic_inc(&coll_qp->num_of_initialized_qps);
-		}
+			goto unlock_cfg;
 	}
 
 	/* all is well, we are ready to receive */
 	rc = hl_cn_qp_modify(cn_port, qp, CN_QP_STATE_RTR, in);
 
-	if (is_coll_conn)
-		hl_cn_cfg_unlock_all(hdev);
-	else
-		port_funcs->cfg_unlock(cn_port);
+	port_funcs->cfg_unlock(cn_port);
 
 	rtnl_unlock();
 
 	return rc;
 
-unregister_coll_qp:
-	if (is_coll_conn) {
-		struct hl_cn_coll_qp *coll_qp = get_coll_qp_from_conn_id(cn_port, qp->qp_id);
-
-		port_funcs->unregister_qp(cn_port, qp->qp_id);
-		atomic_dec(&coll_qp->num_of_initialized_qps);
-	}
 unlock_cfg:
-	if (is_coll_conn)
-		hl_cn_cfg_unlock_all(hdev);
-	else
-		port_funcs->cfg_unlock(cn_port);
+	port_funcs->cfg_unlock(cn_port);
 
 	rtnl_unlock();
 
@@ -2140,36 +1988,10 @@ u32 hl_cn_get_max_qp_id(struct hl_cn_port *cn_port)
 	return max_qp_id;
 }
 
-static void hl_cn_unset_coll_qps_destroy(struct hl_cn_coll_qp *coll_qp)
-{
-	struct hl_cn_device *hdev = coll_qp->hdev;
-	u32 port;
-
-	/* Go over all the ports and call the QP release function for the collective QP of each
-	 * one. In that way, all the QPs will go through the same release flow.
-	 */
-	for (port = 0; port < hdev->cn_props.max_num_of_ports; port++) {
-		if (!(hdev->ports_mask & BIT(port)))
-			continue;
-
-		hl_cn_qp_do_release(coll_qp->qps_array[port]);
-	}
-}
-
-static void hl_cn_coll_qp_free(struct hl_cn_coll_qp *coll_qp)
-{
-	struct hl_cn_device *hdev = coll_qp->hdev;
-
-	xa_erase(&hdev->coll_props[coll_qp->coll_conn_type].coll_qp_ids, coll_qp->id);
-	kfree(coll_qp->qps_array);
-	kfree(coll_qp);
-}
-
 static void qp_destroy_work(struct work_struct *work)
 {
 	struct hl_cn_qp *qp = container_of(work, struct hl_cn_qp, async_work);
 	struct hl_cn_wq_array_properties *swq_arr_props, *rwq_arr_props;
-	struct hl_cn_coll_properties *coll_props = NULL;
 	struct hl_cn_port *cn_port = qp->cn_port;
 	struct hl_cn_asic_port_funcs *port_funcs;
 	struct hl_cn_qpc_drain_attr drain_attr;
@@ -2197,46 +2019,14 @@ static void qp_destroy_work(struct work_struct *work)
 	if (qp->curr_state == CN_QP_STATE_SQD)
 		hl_cn_qp_modify(cn_port, qp, CN_QP_STATE_SQD, &drain_attr);
 
-	if (qp->is_coll)
-		hl_cn_cfg_lock_all(hdev);
-	else
-		port_funcs->cfg_lock(cn_port);
-
-	if (qp->is_coll) {
-		struct hl_cn_coll_qp *coll_qp = get_coll_qp_from_conn_id(cn_port, qp->qp_id);
-
-		/* If this QP is not in reset (i.e., was set), we can decrement the number of
-		 * initialized QPs under this collective QP.
-		 */
-		if (qp->curr_state != CN_QP_STATE_RESET)
-			atomic_dec(&coll_qp->num_of_initialized_qps);
-
-		/* If there are no initialized QPs left, we can destroy all the rest of the QPs
-		 * with the same collective ID.
-		 */
-		if (atomic_read(&coll_qp->num_of_initialized_qps) == 0)
-			hl_cn_unset_coll_qps_destroy(coll_qp);
-
-		/* If this is the last QP with a collective ID, we can destroy the collective QP
-		 * and remove its ID from the collective idr.
-		 */
-		if (atomic_dec_and_test(&coll_qp->num_of_allocated_qps))
-			hl_cn_coll_qp_free(coll_qp);
-	}
+	port_funcs->cfg_lock(cn_port);
 
 	hl_cn_qp_modify(cn_port, qp, CN_QP_STATE_RESET, &rst_attr);
 
 	port_funcs->unregister_qp(cn_port, qp->qp_id);
 
-	if (qp->is_coll) {
-		coll_props = &hdev->coll_props[qp->coll_conn_type];
-
-		swq_arr_props = &cn_port->wq_arr_props[coll_props->swq_type];
-		rwq_arr_props = &cn_port->wq_arr_props[coll_props->rwq_type];
-	} else {
-		swq_arr_props = &cn_port->wq_arr_props[HL_CNI_USER_WQ_SEND];
-		rwq_arr_props = &cn_port->wq_arr_props[HL_CNI_USER_WQ_RECV];
-	}
+	swq_arr_props = &cn_port->wq_arr_props[HL_CNI_USER_WQ_SEND];
+	rwq_arr_props = &cn_port->wq_arr_props[HL_CNI_USER_WQ_RECV];
 
 	if (qp->swq_handle) {
 		hl_cn_mem_destroy(hdev, qp->swq_handle);
@@ -2258,29 +2048,14 @@ static void qp_destroy_work(struct work_struct *work)
 		}
 	}
 
-	if (qp->is_coll) {
-		atomic_t *num_of_allocated_coll_qps =
-						hl_cn_is_scale_out_coll_type(qp->coll_conn_type) ?
-						&cn_port->num_of_allocated_scale_out_coll_qps :
-						&cn_port->num_of_allocated_coll_qps;
+	xa_erase(&cn_port->qp_ids, qp->qp_id);
 
-		if (atomic_dec_and_test(num_of_allocated_coll_qps)) {
-			if (swq_arr_props->under_unset)
-				__user_wq_arr_unset(ctx, cn_port, coll_props->swq_type);
+	if (atomic_dec_and_test(&cn_port->num_of_allocated_qps)) {
+		if (swq_arr_props->under_unset)
+			__user_wq_arr_unset(ctx, cn_port, HL_CNI_USER_WQ_SEND);
 
-			if (rwq_arr_props->under_unset)
-				__user_wq_arr_unset(ctx, cn_port, coll_props->rwq_type);
-		}
-	} else {
-		xa_erase(&cn_port->qp_ids, qp->qp_id);
-
-		if (atomic_dec_and_test(&cn_port->num_of_allocated_qps)) {
-			if (swq_arr_props->under_unset)
-				__user_wq_arr_unset(ctx, cn_port, HL_CNI_USER_WQ_SEND);
-
-			if (rwq_arr_props->under_unset)
-				__user_wq_arr_unset(ctx, cn_port, HL_CNI_USER_WQ_RECV);
-		}
+		if (rwq_arr_props->under_unset)
+			__user_wq_arr_unset(ctx, cn_port, HL_CNI_USER_WQ_RECV);
 	}
 
 	if (qp->req_user_cq)
@@ -2296,18 +2071,15 @@ static void qp_destroy_work(struct work_struct *work)
 	 * Lock is to avoid concurrent memory access from a new handle created
 	 * before freeing memory
 	 */
-	if (qp->is_coll)
-		hl_cn_cfg_unlock_all(hdev);
-	else
-		port_funcs->cfg_unlock(cn_port);
+	port_funcs->cfg_unlock(cn_port);
 
 	kfree(qp);
 }
 
 static void qps_drain_async_work(struct hl_cn_device *hdev)
 {
-	int i, num_gen_qps, num_coll_qps, num_scale_out_coll_qps;
 	struct hl_cn_port *cn_port;
+	int i, num_gen_qps;
 
 	/* wait for the workers to complete */
 	for (i = 0; i < hdev->cn_props.max_num_of_ports; i++) {
@@ -2321,17 +2093,6 @@ static void qps_drain_async_work(struct hl_cn_device *hdev)
 		num_gen_qps = atomic_read(&cn_port->num_of_allocated_qps);
 		if (num_gen_qps)
 			dev_warn(hdev->dev, "Port %d still has %d QPs alive\n", i, num_gen_qps);
-
-		num_coll_qps = atomic_read(&cn_port->num_of_allocated_coll_qps);
-		if (num_coll_qps)
-			dev_warn(hdev->dev, "Port %d still has %d collective QPs alive\n", i,
-				 num_coll_qps);
-
-		num_scale_out_coll_qps =
-			atomic_read(&cn_port->num_of_allocated_scale_out_coll_qps);
-		if (num_scale_out_coll_qps)
-			dev_warn(hdev->dev, "Port %d still has %d scale-out collective QPs alive\n",
-				 i, num_scale_out_coll_qps);
 	}
 }
 
@@ -2349,7 +2110,6 @@ static int destroy_qp(struct hl_cn_device *hdev, struct hl_cni_destroy_conn_in *
 	struct hl_cn_asic_funcs *asic_funcs;
 	struct hl_cn_port *cn_port;
 	struct hl_cn_qp *qp;
-	bool is_coll_conn;
 	u32 port, flags;
 	int rc;
 
@@ -2380,16 +2140,9 @@ static int destroy_qp(struct hl_cn_device *hdev, struct hl_cni_destroy_conn_in *
 	asic_funcs = hdev->asic_funcs;
 	port_funcs = asic_funcs->port_funcs;
 
-	is_coll_conn = asic_funcs->is_coll_conn_id(hdev, in->conn_id);
-
 	/* prevent reentrancy by locking the whole process of destroy_qp */
-	if (is_coll_conn) {
-		hl_cn_cfg_lock_all(hdev);
-		qp = hl_cn_get_qp_from_coll_conn_id(cn_port, in->conn_id);
-	} else {
-		port_funcs->cfg_lock(cn_port);
-		qp = xa_load(&cn_port->qp_ids, in->conn_id);
-	}
+	port_funcs->cfg_lock(cn_port);
+	qp = xa_load(&cn_port->qp_ids, in->conn_id);
 
 	if (IS_ERR_OR_NULL(qp)) {
 		rc = PTR_ERR_OR_EINVAL(qp);
@@ -2398,18 +2151,12 @@ static int destroy_qp(struct hl_cn_device *hdev, struct hl_cni_destroy_conn_in *
 
 	hl_cn_qp_do_release(qp);
 
-	if (is_coll_conn)
-		hl_cn_cfg_unlock_all(hdev);
-	else
-		port_funcs->cfg_unlock(cn_port);
+	port_funcs->cfg_unlock(cn_port);
 
 	return 0;
 
 out_err:
-	if (is_coll_conn)
-		hl_cn_cfg_unlock_all(hdev);
-	else
-		port_funcs->cfg_unlock(cn_port);
+	port_funcs->cfg_unlock(cn_port);
 
 	return rc;
 }
@@ -2452,11 +2199,10 @@ static void qps_stop(struct hl_cn_device *hdev)
 static void qps_destroy(struct hl_cn_device *hdev)
 {
 	struct hl_cn_asic_port_funcs *port_funcs = hdev->asic_funcs->port_funcs;
-	struct hl_cn_coll_qp *coll_qp;
 	struct hl_cn_port *cn_port;
 	unsigned long qp_id = 0;
-	int i, coll_conn_type;
 	struct hl_cn_qp *qp;
+	int i;
 
 	/* destroy the QPs */
 	for (i = 0; i < hdev->cn_props.max_num_of_ports; i++) {
@@ -2478,25 +2224,6 @@ static void qps_destroy(struct hl_cn_device *hdev)
 		port_funcs->cfg_unlock(cn_port);
 	}
 
-	hl_cn_cfg_lock_all(hdev);
-
-	for (coll_conn_type = 0; coll_conn_type < HL_CN_COLL_CONN_TYPE_MAX; coll_conn_type++) {
-		xa_for_each(&hdev->coll_props[coll_conn_type].coll_qp_ids, qp_id, coll_qp) {
-			if (IS_ERR_OR_NULL(coll_qp))
-				continue;
-
-			for (i = 0; i < hdev->cn_props.max_num_of_ports; i++) {
-				if (!(hdev->ports_mask & BIT(i)))
-					continue;
-
-				qp = coll_qp->qps_array[i];
-				hl_cn_qp_do_release(qp);
-			}
-		}
-	}
-
-	hl_cn_cfg_unlock_all(hdev);
-
 	/* wait for the workers to complete */
 	qps_drain_async_work(hdev);
 
@@ -2515,15 +2242,6 @@ static void qps_destroy(struct hl_cn_device *hdev)
 
 		port_funcs->cfg_unlock(cn_port);
 	}
-
-	hl_cn_cfg_lock_all(hdev);
-
-	for (coll_conn_type = 0; coll_conn_type < HL_CN_COLL_CONN_TYPE_MAX; coll_conn_type++) {
-		xa_for_each(&hdev->coll_props[coll_conn_type].coll_qp_ids, qp_id, coll_qp)
-			dev_err_ratelimited(hdev->dev, "Collective QP %ld is still alive\n", qp_id);
-	}
-
-	hl_cn_cfg_unlock_all(hdev);
 }
 
 static void wq_arrs_destroy(struct hl_cn_ctx *ctx)
@@ -2584,7 +2302,6 @@ static int user_wq_arr_set(struct hl_cn_device *hdev, struct hl_cni_user_wq_arr_
 			   struct hl_cni_user_wq_arr_set_out *out, struct hl_cn_ctx *ctx)
 {
 	u32 port, type, num_of_wqs, num_of_wq_entries, min_wqs_per_port, mem_id;
-	struct hl_cn_coll_properties *coll_props = NULL;
 	struct hl_cn_wq_array_properties *wq_arr_props;
 	struct hl_cn_asic_port_funcs *port_funcs;
 	struct hl_cn_properties *cn_props;
@@ -2635,11 +2352,8 @@ static int user_wq_arr_set(struct hl_cn_device *hdev, struct hl_cni_user_wq_arr_
 	wq_arr_props = &cn_port->wq_arr_props[type];
 	type_str = wq_arr_props->type_str;
 
-	if (wq_arr_props->is_coll)
-		coll_props = &hdev->coll_props[wq_arr_props->coll_wq_type];
-
 	/* For generic WQs minimum number of wqs required is 2, one for raw eth and one for rdma */
-	min_wqs_per_port = wq_arr_props->is_coll ? NIC_MIN_COLL_WQS_PER_PORT : NIC_MIN_WQS_PER_PORT;
+	min_wqs_per_port = NIC_MIN_WQS_PER_PORT;
 	if (in->num_of_wqs < min_wqs_per_port) {
 		dev_dbg(hdev->dev, "number of %s WQs must be minimum %d, port %d\n", type_str,
 			min_wqs_per_port, port);
@@ -2712,22 +2426,8 @@ static int user_wq_arr_set(struct hl_cn_device *hdev, struct hl_cni_user_wq_arr_
 		goto out;
 	}
 
-	if (wq_arr_props->is_coll) {
-		num_of_wq_entries = coll_props->num_of_coll_wq_entries;
-		num_of_wqs = coll_props->num_of_coll_wqs;
-
-		if (!hl_cn_is_scale_out_coll_type(wq_arr_props->coll_wq_type) &&
-		    in->num_of_wqs > NIC_MAX_NON_SCALE_OUT_COLL_CONNS) {
-			dev_dbg(hdev->dev,
-				"Too many WQs (%u) for non scale-out collective WQ - should be max %u, port %d\n",
-				in->num_of_wqs, NIC_MAX_NON_SCALE_OUT_COLL_CONNS, port);
-			rc = -EINVAL;
-			goto out;
-		}
-	} else {
-		num_of_wq_entries = cn_port->num_of_wq_entries;
-		num_of_wqs = cn_port->num_of_wqs;
-	}
+	num_of_wq_entries = cn_port->num_of_wq_entries;
+	num_of_wqs = cn_port->num_of_wqs;
 
 	if (num_of_wq_entries && num_of_wq_entries != in->num_of_wq_entries) {
 		dev_dbg(hdev->dev, "%s WQ number of entries (0x%x) should be 0x%x, port %d\n",
@@ -2749,20 +2449,8 @@ static int user_wq_arr_set(struct hl_cn_device *hdev, struct hl_cni_user_wq_arr_
 		goto out;
 	}
 
-	if (wq_arr_props->is_coll) {
-		/* num_of_coll_wq_entries and num_of_coll_wqs are global hence will be set for the
-		 * first requested WQ array.
-		 */
-		if (atomic_read(&coll_props->num_of_coll_wq_arrays) == 0) {
-			coll_props->num_of_coll_wq_entries = in->num_of_wq_entries;
-			coll_props->num_of_coll_wqs = in->num_of_wqs;
-		}
-
-		atomic_inc(&coll_props->num_of_coll_wq_arrays);
-	} else {
-		cn_port->num_of_wq_entries = in->num_of_wq_entries;
-		cn_port->num_of_wqs = in->num_of_wqs;
-	}
+	cn_port->num_of_wq_entries = in->num_of_wq_entries;
+	cn_port->num_of_wqs = in->num_of_wqs;
 
 	wq_arr_props->enable = true;
 
@@ -2774,7 +2462,6 @@ out:
 
 static int __user_wq_arr_unset(struct hl_cn_ctx *ctx, struct hl_cn_port *cn_port, u32 type)
 {
-	struct hl_cn_coll_properties *coll_props = NULL;
 	struct hl_cn_wq_array_properties *wq_arr_props;
 	struct hl_cn_device *hdev;
 	char *type_str;
@@ -2791,9 +2478,6 @@ static int __user_wq_arr_unset(struct hl_cn_ctx *ctx, struct hl_cn_port *cn_port
 		dev_err(hdev->dev, "%s WQ array unset failed, port %d, err %d\n", type_str, port,
 			rc);
 
-	if (wq_arr_props->is_coll)
-		coll_props = &hdev->coll_props[wq_arr_props->coll_wq_type];
-
 	wq_arr_props->enable = false;
 	wq_arr_props->under_unset = false;
 
@@ -2801,11 +2485,6 @@ static int __user_wq_arr_unset(struct hl_cn_ctx *ctx, struct hl_cn_port *cn_port
 	    !cn_port->wq_arr_props[HL_CNI_USER_WQ_RECV].enable) {
 		cn_port->num_of_wq_entries = 0;
 		cn_port->num_of_wqs = 0;
-	}
-
-	if (wq_arr_props->is_coll && atomic_dec_and_test(&coll_props->num_of_coll_wq_arrays)) {
-		coll_props->num_of_coll_wq_entries = 0;
-		coll_props->num_of_coll_wqs = 0;
 	}
 
 	return rc;
@@ -2867,23 +2546,10 @@ static int user_wq_arr_unset(struct hl_cn_device *hdev, struct hl_cni_user_wq_ar
 	}
 
 	/* Allocated QPs might still use the WQ, hence unset the WQ once they are destroyed */
-	if (wq_arr_props->is_coll) {
-		atomic_t *num_of_allocated_coll_qps =
-					hl_cn_is_scale_out_coll_type(wq_arr_props->coll_wq_type) ?
-					&cn_port->num_of_allocated_scale_out_coll_qps :
-					&cn_port->num_of_allocated_coll_qps;
-
-		if (atomic_read(num_of_allocated_coll_qps)) {
-			wq_arr_props->under_unset = true;
-			rc = 0;
-			goto out;
-		}
-	} else {
-		if (atomic_read(&cn_port->num_of_allocated_qps)) {
-			wq_arr_props->under_unset = true;
-			rc = 0;
-			goto out;
-		}
+	if (atomic_read(&cn_port->num_of_allocated_qps)) {
+		wq_arr_props->under_unset = true;
+		rc = 0;
+		goto out;
 	}
 
 	rc = __user_wq_arr_unset(ctx, cn_port, type);
@@ -3564,8 +3230,8 @@ static int user_db_fifo_unset_and_free(struct hl_cn_port *cn_port, u32 id,
 	asic_funcs->port_funcs->db_fifo_unset(cn_port, id, xa_pdata);
 
 	/* Destroy CI buffer if we allocated one.
-	 * Note: Not all DB fifo modes need CI memory buffer. e.g. Collective operations
-	 * track CI via sync objects.
+	 * Note: Not all DB fifo modes need CI memory buffer.
+	 * Track CI via sync objects.
 	 * If there is an issue in destroying the CI memory, then we might exit this function
 	 * without freeing the db_fifo_pool. This would cause a kernel assertion when we try to do
 	 * rmmod as the gen_alloc_destroy for db_fifo_pool would fail as there are allocations
@@ -3587,10 +3253,9 @@ static int user_db_fifo_set(struct hl_cn_device *hdev, struct hl_cn_ctx *ctx,
 	u64 umr_block_addr, umr_mmap_handle, ci_mmap_handle = 0, ci_device_handle;
 	struct hl_cn_db_fifo_xarray_pdata *xa_pdata;
 	struct hl_cn_asic_port_funcs *port_funcs;
-	u32 umr_db_offset, port, id, sob_payload;
 	struct hl_cn_mem_data mem_data = {};
+	u32 umr_db_offset, port, id;
 	struct hl_cn_port *cn_port;
-	bool is_coll_ops;
 	int rc, i;
 
 	if (!in || !out) {
@@ -3633,10 +3298,6 @@ static int user_db_fifo_set(struct hl_cn_device *hdev, struct hl_cn_ctx *ctx,
 	if (rc)
 		goto cfg_unlock;
 
-	is_coll_ops = (in->mode == HL_CNI_DB_FIFO_TYPE_COLL_OPS_SHORT) ||
-		      (in->mode == HL_CNI_DB_FIFO_TYPE_COLL_OPS_LONG) ||
-		      (in->mode == HL_CNI_DB_FIFO_TYPE_COLL_DIR_OPS_SHORT) ||
-		      (in->mode == HL_CNI_DB_FIFO_TYPE_COLL_DIR_OPS_LONG);
 	xa_pdata->fifo_mode = in->mode;
 
 	/* User may call db_fifo_set multiple times post db_fifo_alloc. So, before doing any
@@ -3672,41 +3333,24 @@ static int user_db_fifo_set(struct hl_cn_device *hdev, struct hl_cn_ctx *ctx,
 		goto free_db_fifo;
 	}
 
-	if (is_coll_ops && in->num_sobs) {
-		xa_pdata->base_sob_addr = in->base_sob_addr;
-		xa_pdata->num_sobs = in->num_sobs;
-
-		/* SOB operation increment with value 1. */
-		sob_payload = FIELD_PREP(NIC_SOB_INC_MASK, 1) | FIELD_PREP(NIC_SOB_VAL_MASK, 1);
-
-		/* Track DB fifo CI using sync objects.
-		 * Lower 32 bits: SOB offset from LBW base.
-		 * Upper 32 bits: LBW SOB payload.
-		 */
-		ci_device_handle = (((u64)sob_payload) << 32) | xa_pdata->base_sob_addr;
-	} else {
-		/* Allocate a consumer-index(CI) buffer in host kernel.
-		 * HW updates CI when it pops a db fifo. User mmaps CI
-		 * buffer and may poll to read current CI.
-		 *
-		 * Allocate page size, else we risk exposing kernel data
-		 * to userspace inadvertently.
-		 */
-		mem_data.mem_id = HL_CN_DRV_MEM_HOST_DMA_COHERENT;
-		mem_data.size = PAGE_SIZE;
-		rc = hl_cn_mem_alloc(hdev, &mem_data);
-		if (rc) {
-			dev_dbg_ratelimited(hdev->dev,
-					    "DB FIFO id %d, CI buffer allocation failed, port %d\n",
-					    id, port);
-			goto free_db_fifo;
-		}
-
-		ci_mmap_handle = mem_data.handle;
-		ci_device_handle = mem_data.addr;
+	/* Allocate a consumer-index(CI) buffer in host kernel.
+	 * HW updates CI when it pops a db fifo. User mmaps CI buffer and may poll to read current
+	 * CI.
+	 *
+	 * Allocate page size, else we risk exposing kernel data to userspace inadvertently.
+	 */
+	mem_data.mem_id = HL_CN_DRV_MEM_HOST_DMA_COHERENT;
+	mem_data.size = PAGE_SIZE;
+	rc = hl_cn_mem_alloc(hdev, &mem_data);
+	if (rc) {
+		dev_dbg_ratelimited(hdev->dev,
+				    "DB FIFO id %d, CI buffer allocation failed, port %d\n",
+				    id, port);
+		goto free_db_fifo;
 	}
 
-	xa_pdata->dir_dup_ports_mask = in->dir_dup_ports_mask;
+	ci_mmap_handle = mem_data.handle;
+	ci_device_handle = mem_data.addr;
 
 	rc = port_funcs->db_fifo_set(cn_port, ctx, id, ci_device_handle, xa_pdata);
 	if (rc) {
@@ -4477,15 +4121,6 @@ static int __hl_cn_control(struct hl_cn_device *hdev, u32 op, void *input, void 
 	case HL_CNI_OP_USER_WQ_UNSET:
 		rc = user_wq_arr_unset(hdev, input, ctx);
 		break;
-	case HL_CNI_OP_USER_CQ_SET:
-		rc = -EPERM;
-		break;
-	case HL_CNI_OP_USER_CQ_UNSET:
-		rc = -EPERM;
-		break;
-	case HL_CNI_OP_USER_CQ_UPDATE_CI:
-		rc = -EPERM;
-		break;
 	case HL_CNI_OP_ALLOC_USER_CQ_ID:
 		rc = alloc_user_cq_id(hdev, input, output, ctx);
 		break;
@@ -4903,33 +4538,9 @@ static void cn_wq_arr_props_init(struct hl_cn_wq_array_properties *wq_arr_props)
 {
 	wq_arr_props[HL_CNI_USER_WQ_SEND].type_str = "send";
 	wq_arr_props[HL_CNI_USER_WQ_SEND].is_send = true;
-	wq_arr_props[HL_CNI_USER_WQ_SEND].is_coll = false;
 
 	wq_arr_props[HL_CNI_USER_WQ_RECV].type_str = "recv";
 	wq_arr_props[HL_CNI_USER_WQ_RECV].is_send = false;
-	wq_arr_props[HL_CNI_USER_WQ_RECV].is_coll = false;
-
-	wq_arr_props[HL_CNI_USER_COLL_WQ_SEND].type_str = "collective send";
-	wq_arr_props[HL_CNI_USER_COLL_WQ_SEND].is_send = true;
-	wq_arr_props[HL_CNI_USER_COLL_WQ_SEND].is_coll = true;
-	wq_arr_props[HL_CNI_USER_COLL_WQ_SEND].coll_wq_type = HL_CN_COLL_CONN_TYPE_NON_SCALE_OUT;
-
-	wq_arr_props[HL_CNI_USER_COLL_WQ_RECV].type_str = "collective recv";
-	wq_arr_props[HL_CNI_USER_COLL_WQ_RECV].is_send = false;
-	wq_arr_props[HL_CNI_USER_COLL_WQ_RECV].is_coll = true;
-	wq_arr_props[HL_CNI_USER_COLL_WQ_RECV].coll_wq_type = HL_CN_COLL_CONN_TYPE_NON_SCALE_OUT;
-
-	wq_arr_props[HL_CNI_USER_COLL_SCALE_OUT_WQ_SEND].type_str = "collective scale-out send";
-	wq_arr_props[HL_CNI_USER_COLL_SCALE_OUT_WQ_SEND].is_send = true;
-	wq_arr_props[HL_CNI_USER_COLL_SCALE_OUT_WQ_SEND].is_coll = true;
-	wq_arr_props[HL_CNI_USER_COLL_SCALE_OUT_WQ_SEND].coll_wq_type =
-						HL_CN_COLL_CONN_TYPE_SCALE_OUT;
-
-	wq_arr_props[HL_CNI_USER_COLL_SCALE_OUT_WQ_RECV].type_str = "collective scale-out recv";
-	wq_arr_props[HL_CNI_USER_COLL_SCALE_OUT_WQ_RECV].is_send = false;
-	wq_arr_props[HL_CNI_USER_COLL_SCALE_OUT_WQ_RECV].is_coll = true;
-	wq_arr_props[HL_CNI_USER_COLL_SCALE_OUT_WQ_RECV].coll_wq_type =
-						HL_CN_COLL_CONN_TYPE_SCALE_OUT;
 }
 
 static int cn_port_sw_init(struct hl_cn_port *cn_port)
@@ -5019,25 +4630,6 @@ qp_wq_err:
 	return rc;
 }
 
-static void cn_coll_props_init(struct hl_cn_coll_properties *coll_props)
-{
-	xa_init_flags(&coll_props[HL_CN_COLL_CONN_TYPE_NON_SCALE_OUT].coll_qp_ids, XA_FLAGS_ALLOC);
-	atomic_set(&coll_props[HL_CN_COLL_CONN_TYPE_NON_SCALE_OUT].num_of_coll_wq_arrays, 0);
-	coll_props[HL_CN_COLL_CONN_TYPE_NON_SCALE_OUT].swq_type = HL_CNI_USER_COLL_WQ_SEND;
-	coll_props[HL_CN_COLL_CONN_TYPE_NON_SCALE_OUT].rwq_type = HL_CNI_USER_COLL_WQ_RECV;
-
-	xa_init_flags(&coll_props[HL_CN_COLL_CONN_TYPE_SCALE_OUT].coll_qp_ids, XA_FLAGS_ALLOC);
-	atomic_set(&coll_props[HL_CN_COLL_CONN_TYPE_SCALE_OUT].num_of_coll_wq_arrays, 0);
-	coll_props[HL_CN_COLL_CONN_TYPE_SCALE_OUT].swq_type = HL_CNI_USER_COLL_SCALE_OUT_WQ_SEND;
-	coll_props[HL_CN_COLL_CONN_TYPE_SCALE_OUT].rwq_type = HL_CNI_USER_COLL_SCALE_OUT_WQ_RECV;
-}
-
-static void cn_coll_props_fini(struct hl_cn_coll_properties *coll_props)
-{
-	xa_destroy(&coll_props[HL_CN_COLL_CONN_TYPE_NON_SCALE_OUT].coll_qp_ids);
-	xa_destroy(&coll_props[HL_CN_COLL_CONN_TYPE_SCALE_OUT].coll_qp_ids);
-}
-
 static int cn_macro_sw_init(struct hl_cn_macro *cn_macro)
 {
 	struct hl_cn_asic_funcs *asic_funcs;
@@ -5063,8 +4655,6 @@ static void hl_cn_sw_fini(struct hl_cn_device *hdev)
 
 	for (i = 0; i < hdev->cn_props.max_num_of_ports; i++)
 		cn_port_sw_fini(&hdev->cn_ports[i]);
-
-	cn_coll_props_fini(hdev->coll_props);
 
 	for (i = 0; i < hdev->cn_props.num_of_macros; i++)
 		cn_macro_sw_fini(&hdev->cn_macros[i]);
@@ -5173,8 +4763,6 @@ static int hl_cn_sw_init(struct hl_cn_device *hdev)
 		}
 	}
 
-	cn_coll_props_init(hdev->coll_props);
-
 	/* At this stage, we don't know how many ports we have, so we must
 	 * allocate for the maximum number of ports (and also free all of them
 	 * in sw_fini)
@@ -5184,8 +4772,6 @@ static int hl_cn_sw_init(struct hl_cn_device *hdev)
 		cn_port->hdev = hdev;
 		cn_port->port = i;
 		atomic_set(&cn_port->num_of_allocated_qps, 0);
-		atomic_set(&cn_port->num_of_allocated_coll_qps, 0);
-		atomic_set(&cn_port->num_of_allocated_scale_out_coll_qps, 0);
 		rc = cn_port_sw_init(cn_port);
 		if (rc) {
 			dev_err(hdev->dev, "S/W init failed, port %d\n", i);
@@ -5198,8 +4784,6 @@ static int hl_cn_sw_init(struct hl_cn_device *hdev)
 port_init_fail:
 	for (i = 0; i < port_cnt; i++)
 		cn_port_sw_fini(&hdev->cn_ports[i]);
-
-	cn_coll_props_fini(hdev->coll_props);
 macro_init_fail:
 	for (i = 0; i < macro_cnt; i++)
 		cn_macro_sw_fini(&hdev->cn_macros[i]);

@@ -5170,11 +5170,6 @@ static bool gaudi2_cn_cfg_is_locked(struct hl_cn_port *cn_port)
 	return mutex_is_locked(&gaudi2_port->cfg_lock);
 }
 
-static bool gaudi2_cn_is_coll_conn_id(struct hl_cn_device *hdev, u32 conn_id)
-{
-	return false;
-}
-
 static u32 gaudi2_cn_get_max_msg_sz(struct hl_cn_device *hdev)
 {
 	return SZ_1G;
@@ -5424,7 +5419,6 @@ static struct hl_cn_asic_funcs gaudi2_cn_funcs = {
 	.request_irqs = gaudi2_cn_eq_request_irqs,
 	.synchronize_irqs = gaudi2_cn_eq_sync_irqs,
 	.free_irqs = gaudi2_cn_eq_free_irqs,
-	.is_coll_conn_id = gaudi2_cn_is_coll_conn_id,
 	.phy_dump_serdes_params = gaudi2_cn_phy_dump_serdes_params,
 	.get_max_msg_sz = gaudi2_cn_get_max_msg_sz,
 	.qp_syndrome_to_str = gaudi2_cn_qp_err_syndrome_to_str,

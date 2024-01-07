@@ -60,16 +60,6 @@ enum hl_aux_dev_type {
 };
 
 /**
- * enum gaudi3_setup_type - Setup types a gaudi3 device can reside on.
- * GAUDI3_SETUP_TYPE_HLS3: HLS setup.
- * GAUDI3_SETUP_TYPE_HL325_S_EXT_LB: Standalone, one card only.
- */
-enum gaudi3_setup_type {
-	GAUDI3_SETUP_TYPE_HLS3,
-	GAUDI3_SETUP_TYPE_HL325_S_EXT_LB,
-};
-
-/**
  * struct hl_aux_dev - habanalabs auxiliary device structure.
  * @adev: auxiliary device.
  * @aux_ops: pointer functions for drivers communication.
@@ -217,9 +207,6 @@ struct hl_cn_cpucp_info {
  * @lanes_per_port: number of physical lanes per port.
  * @cpucp_checkers_shift: CPUCP checkers flags shift.
  * @num_of_dies: Number of dies in the asic.
- * @dram_enable: is DRAM available.
- * @gaudi2_setup_type: Gaudi2 setup type.
- * @gaudi3_setup_type: Gaudi3 setup type.
  */
 struct hl_cn_aux_data {
 	struct pci_dev *pdev;
@@ -260,9 +247,6 @@ struct hl_cn_aux_data {
 	u8 lanes_per_port;
 	u8 cpucp_checkers_shift;
 	u8 num_of_dies;
-	u8 dram_enable;
-	u8 gaudi2_setup_type;
-	u8 gaudi3_setup_type;
 };
 
 /**

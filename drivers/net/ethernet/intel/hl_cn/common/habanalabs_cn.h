@@ -112,8 +112,6 @@
 
 #define DMA_COHERENT_MAX_SIZE	SZ_4M
 
-#define NIC_MAX_NON_SCALE_OUT_COLL_CONNS	128
-
 #define PHY_TX_TAPS_NUM		5
 
 #define ACCUMULATE_FEC_STATS_DURATION_MS	100 /* ms */
@@ -139,7 +137,6 @@ enum hl_cn_debugfs_files_idx {
 	NIC_PRINT_FEC_STATS,
 	NIC_DISABLE_DECAP,
 	NIC_PHY_SET_NRZ,
-	NIC_COLL_LAG_SIZE,
 	NIC_PHY_DUMP_SERDES_PARAMS,
 	NIC_INJECT_RX_ERR,
 	NIC_PHY_CALC_BER,
@@ -171,18 +168,6 @@ static_assert(HL_CN_TRACE_NUM_EVENTS < 64);
 #define HL_CN_TRACE_MEM_ALLOC_MASK		BIT_ULL(HL_CN_TRACE_MEM_ALLOC)
 #define HL_CN_TRACE_MEM_DESTROY_MASK		BIT_ULL(HL_CN_TRACE_MEM_DESTROY)
 #define HL_CN_TRACE_ALL_EVENTS_MASK		(BIT_ULL(HL_CN_TRACE_NUM_EVENTS) - 1)
-
-/**
- * enum hl_cn_coll_conn_type - Collective connection type.
- * HL_CN_COLL_CONN_TYPE_NON_SCALE_OUT - non scale out connection.
- * HL_CN_COLL_CONN_TYPE_SCALE_OUT - scale out connection.
- * HL_CN_COLL_CONN_TYPE_MAX - number of values in enum.
- */
-enum hl_cn_coll_conn_type {
-	HL_CN_COLL_CONN_TYPE_NON_SCALE_OUT,
-	HL_CN_COLL_CONN_TYPE_SCALE_OUT,
-	HL_CN_COLL_CONN_TYPE_MAX
-};
 
 /**
  * enum mtu_type - Describes QP's MTU value source.
@@ -445,8 +430,6 @@ struct hl_cn_wqe_info {
  * @db_pool_addr: offset of the allocated address in gen pool
  * @fifo_offset: actual fifo offset allocated for that id
  * @fifo_size: size of the fifo allocated
- * @base_sob_addr: Sync object base address for collective operations.
- * @num_sobs: Number of sync objects for collective operations.
  * @fifo_mode: mode of the fifo as received in the IOCTL
  */
 struct hl_cn_db_fifo_xarray_pdata {
@@ -459,10 +442,7 @@ struct hl_cn_db_fifo_xarray_pdata {
 	u32 db_pool_addr;
 	u32 fifo_offset;
 	u32 fifo_size;
-	u32 base_sob_addr;
-	u32 num_sobs;
 	u8 fifo_mode;
-	u8 dir_dup_ports_mask;
 };
 
 /**
@@ -515,7 +495,6 @@ struct hl_cn_user_cq {
 /**
  * struct hl_cn_wq_array_properties - WQ array properties.
  * @type_str: string of this WQ array type.
- * @coll_wq_type: type of this collective WQ array (scale-out or not).
  * @handle: handle for this WQ array.
  * @dva_base: reserved device VA for this WQ array.
  * @dva_size: size in bytes of device VA block of this WQ array.
@@ -526,12 +505,10 @@ struct hl_cn_user_cq {
  *               destroyed), false otherwise.
  * @on_device_mem: true if this WQ array resides on HBM, false if on host.
  * @is_send: true if this WQ array should contain send WQEs, false if recv WQEs.
- * @is_coll: true if this WQ array is for collective connections.
  * @wq_mmu_bypass: true if WQs has MMU-BP access, false otherwise.
  */
 struct hl_cn_wq_array_properties {
 	char *type_str;
-	enum hl_cn_coll_conn_type coll_wq_type;
 	u64 handle;
 	u64 dva_base;
 	u64 dva_size;
@@ -541,7 +518,6 @@ struct hl_cn_wq_array_properties {
 	u8 under_unset;
 	u8 on_device_mem;
 	u8 is_send;
-	u8 is_coll;
 	u8 wq_mmu_bypass;
 };
 
@@ -587,24 +563,6 @@ struct hl_cn_mem_buf {
 };
 
 /**
- * struct hl_cn_coll_properties - collective properties.
- * @coll_qp_ids: xarray to hold all collective QP IDs.
- * @num_of_coll_wq_arrays: number of allocated collective WQ arrays (each port will have two).
- * @num_of_coll_wqs: number of configured collective WQs.
- * @num_of_coll_wq_entries: number of entries configured per collective WQ.
- * @swq_type: the type of send work-queue array.
- * @rwq_type: the type of receive work-queue array.
- */
-struct hl_cn_coll_properties {
-	struct xarray coll_qp_ids;
-	atomic_t num_of_coll_wq_arrays;
-	u32 num_of_coll_wqs;
-	u32 num_of_coll_wq_entries;
-	u32 swq_type;
-	u32 rwq_type;
-};
-
-/**
  * struct hl_cn_qp - Describes a Queue Pair.
  * @cn_port: Pointer to the port this QP belongs to.
  * @async_work: async work performed on QP, when destroying the QP.
@@ -613,7 +571,6 @@ struct hl_cn_coll_properties {
  * @ctx: Associated user context.
  * @curr_state: The current state of the QP.
  * @mtu_type: Source of MTU value from user, from netdev or default.
- * @coll_conn_type: type of collective connection (scale-out or not).
  * @swq_handle: Send WQ mmap handle.
  * @rwq_handle: Receive WQ mmap handle.
  * @port: The port number this QP belongs to.
@@ -623,7 +580,6 @@ struct hl_cn_coll_properties {
  * @mtu: Current MTU value.
  * @is_req: is requester context was set for the QP.
  * @is_res: is responder context was set for the QP.
- * @is_coll: is collective QP.
  * @force_cq_overrun: force CQ overrun, if needed, during destruction phase.
  */
 struct hl_cn_qp {
@@ -634,7 +590,6 @@ struct hl_cn_qp {
 	struct hl_cn_ctx *ctx;
 	enum hl_cn_qp_state curr_state;
 	enum mtu_type mtu_type;
-	enum hl_cn_coll_conn_type coll_conn_type;
 	u64 swq_handle;
 	u64 rwq_handle;
 	u32 port;
@@ -644,28 +599,7 @@ struct hl_cn_qp {
 	u32 mtu;
 	u8 is_req;
 	u8 is_res;
-	u8 is_coll;
 	u8 force_cq_overrun;
-};
-
-/**
- * struct hl_cn_coll_qp - Describes a collective Queue Pair.
- * @hdev: habanalabs device structure.
- * @qps_array: per port array of QPs which have the same id like this collective QP.
- * @num_of_allocated_qps: number of allocated QPs which have the same id like this
- *                        collective QP.
- * @num_of_initialized_qps: number of initialized QPs which have the same id like this
- *                          collective QP.
- * @coll_conn_type: type of collective connection (scale-out or not).
- * @id: id of this collective QP.
- */
-struct hl_cn_coll_qp {
-	struct hl_cn_device *hdev;
-	struct hl_cn_qp **qps_array;
-	atomic_t num_of_allocated_qps;
-	atomic_t num_of_initialized_qps;
-	enum hl_cn_coll_conn_type coll_conn_type;
-	u32 id;
 };
 
 /**
@@ -845,7 +779,6 @@ struct hl_cni_user_cq_unset_in_params {
  * @override_phy_readiness: indicate if port's phy is ready or not, used for pldm and simulator.
  * @qp_pre_destroy: prepare for a QP destroy. Called under the cfg lock.
  * @qp_post_destroy: cleanup after a QP destroy. Called under the cfg lock.
- * @get_coll_qps_offset: get collective QPs offset.
  * @set_port_status: config port status before notifying user.
  * @send_cpucp_packet: Send cpucp packet to FW.
  */
@@ -915,7 +848,6 @@ struct hl_cn_asic_port_funcs {
 	void (*override_phy_readiness)(struct hl_cn_port *cn_port, bool set_ready);
 	void (*qp_pre_destroy)(struct hl_cn_qp *qp);
 	void (*qp_post_destroy)(struct hl_cn_qp *qp);
-	u32 (*get_coll_qps_offset)(struct hl_cn_port *cn_port);
 	void (*set_port_status)(struct hl_cn_port *cn_port, bool up);
 	int (*send_cpucp_packet)(struct hl_cn_port *cn_port, enum cpucp_packet_id packet_id,
 				 int val);
@@ -953,10 +885,6 @@ struct hl_cn_asic_port_funcs {
  * @request_irqs: Add handlers to interrupt lines.
  * @free_irqs: Free interrupts allocated with request_irqs.
  * @synchronize_irqs: Wait for pending IRQ handlers (on other CPUs).
- * @write_coll_lag_size: Write the collective operation lag size on to register
- * @read_coll_lag_size: Read the collective operation lag size
- * @get_coll_qp_id_range: Get collective QP id range.
- * @is_coll_conn_id: true if the provided conn_id is collective, false otherwise.
  * @phy_dump_serdes_params: dump the serdes parameters.
  * @get_max_msg_sz: get maximum message size.
  * @app_params_clear: clear app params.
@@ -1017,11 +945,6 @@ struct hl_cn_asic_funcs {
 	int (*request_irqs)(struct hl_cn_device *hdev);
 	void (*free_irqs)(struct hl_cn_device *hdev);
 	void (*synchronize_irqs)(struct hl_cn_device *hdev);
-	int (*write_coll_lag_size)(struct hl_cn_device *hdev, u32 coll_lag_size);
-	int (*read_coll_lag_size)(struct hl_cn_device *hdev, u32 *coll_lag_size);
-	void (*get_coll_qp_id_range)(struct hl_cn_device *hdev, bool is_scale_out, u32 *min_id,
-				     u32 *max_id);
-	bool (*is_coll_conn_id)(struct hl_cn_device *hdev, u32 conn_id);
 	void (*phy_dump_serdes_params)(struct hl_cn_device *hdev, char *buf, size_t size);
 	u32 (*get_max_msg_sz)(struct hl_cn_device *hdev);
 	char *(*qp_syndrome_to_str)(u32 syndrome);
@@ -1106,9 +1029,6 @@ struct hl_cn_macro {
  * @wq_arr_props: array per type of WQ array properties.
  * @ev_dqs: per ASID/App events dispatch queues managed by the driver.
  * @num_of_allocated_qps: the currently number of allocated qps for this port.
- * @num_of_allocated_coll_qps: the currently number of allocated collective qps for this port.
- * @num_of_allocated_scale_out_coll_qps: the currently number of allocated scale-out collective qps
- *                                       for this port.
  * @link_status_work: work for checking port link status.
  * @fw_status_work: work for sending port status to the FW.
  * @control_lock: protects from a race between port open/close and other stuff that might run in
@@ -1143,9 +1063,6 @@ struct hl_cn_macro {
  * @num_of_wq_entries: number of entries configured in the port WQ.
  * @num_of_wqs: number of WQs configured for this port.
  * @qp_idx_offset: offset to the base QP index of this port for generic QPs.
- * @coll_qp_idx_offset: offset to the base QP index of this port for collective QPs.
- * @scale_out_coll_qp_idx_offset: offset to the base QP index of this port for scale-out
- *                                collective QPs.
  * @port_toggle_cnt: counts number of times port link status was toggled since PHY init.
  * @cong_q_err_cnt: error count of congestion queue error.
  * @port_open: true if the port H/W is initialized, false otherwise.
@@ -1180,8 +1097,6 @@ struct hl_cn_port {
 	struct hl_cn_ev_dqs ev_dqs;
 	struct hl_cn_reset_tracker *reset_tracker;
 	atomic_t num_of_allocated_qps;
-	atomic_t num_of_allocated_coll_qps;
-	atomic_t num_of_allocated_scale_out_coll_qps;
 	struct delayed_work link_status_work;
 	struct delayed_work fw_status_work;
 	/* protects from a race between port open/close and event handling */
@@ -1215,8 +1130,6 @@ struct hl_cn_port {
 	u32 num_of_wq_entries;
 	u32 num_of_wqs;
 	u32 qp_idx_offset;
-	u32 coll_qp_idx_offset;
-	u32 scale_out_coll_qp_idx_offset;
 	u32 swqe_size;
 	u32 port_toggle_cnt;
 	u32 cong_q_err_cnt;
@@ -1389,7 +1302,6 @@ struct hl_cn_properties {
  * @qp_reset_mode: Graceful/fast reset.
  * @fw_ver: FW version.
  * @driver_ver: driver version.
- * @coll_props: array of collective properties (to distinguish between scale-up/out ports).
  * @mem_ids: an xarray holding all active memory handles.
  * @ctrl_op_mask: mask of supported control operations.
  * @ports_mask: mask of available ports.
@@ -1496,7 +1408,6 @@ struct hl_cn_device {
 	enum hl_cn_asic_type asic_type;
 	enum hl_cn_status_cmd status_cmd;
 	enum hl_cn_qp_reset_mode qp_reset_mode;
-	struct hl_cn_coll_properties coll_props[HL_CN_COLL_CONN_TYPE_MAX];
 	struct xarray mem_ids;
 	u64 ctrl_op_mask;
 	u64 ports_mask;
@@ -1605,8 +1516,6 @@ void hl_cn_phy_set_port_status(struct hl_cn_port *cn_port, bool up);
 int hl_cn_read_spmu_counters(struct hl_cn_port *cn_port, u64 out_data[], u32 *num_out_data);
 void hl_cn_cfg_lock_all(struct hl_cn_device *hdev);
 void hl_cn_cfg_unlock_all(struct hl_cn_device *hdev);
-struct hl_cn_qp *hl_cn_get_qp_from_coll_conn_id(struct hl_cn_port *cn_port, u32 conn_id);
-bool hl_cn_is_scale_out_coll_type(u32 coll_conn_type);
 int hl_cn_qp_modify(struct hl_cn_port *cn_port, struct hl_cn_qp *qp,
 		    enum hl_cn_qp_state new_state, void *params);
 void hl_cn_debugfs_dev_init(struct hl_cn_device *hdev);
@@ -1633,7 +1542,7 @@ struct hl_cn_ev_dq *hl_cn_ccqn_to_dq(struct hl_cn_ev_dqs *ev_dqs, u32 ccqn,
 int hl_cn_reserve_wq_dva(struct hl_cn_ctx *ctx, struct hl_cn_port *cn_port, u64 wq_arr_size,
 			 u32 type, u64 *dva);
 void hl_cn_unreserve_wq_dva(struct hl_cn_ctx *ctx, struct hl_cn_port *cn_port, u32 type);
-u32 hl_cn_get_wq_array_type(bool is_send, bool is_coll, bool is_scale_out);
+u32 hl_cn_get_wq_array_type(bool is_send);
 
 void hl_cn_track_port_reset(struct hl_cn_port *cn_port, u32 syndrome);
 int hl_cn_user_mmap(struct hl_cn_device *hdev, struct hl_cn_ctx *ctx, struct vm_area_struct *vma);

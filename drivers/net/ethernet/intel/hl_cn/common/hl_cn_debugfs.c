@@ -59,7 +59,6 @@ static char hl_cn_debugfs_names[][NAME_MAX] = {
 	[NIC_PRINT_FEC_STATS] = "nic_print_fec_stats",
 	[NIC_DISABLE_DECAP] = "nic_disable_decap",
 	[NIC_PHY_SET_NRZ] = "nic_phy_set_nrz",
-	[NIC_COLL_LAG_SIZE] = "nic_coll_lag_size",
 	[NIC_PHY_DUMP_SERDES_PARAMS] = "nic_phy_dump_serdes_params",
 	[NIC_INJECT_RX_ERR] = "nic_inject_rx_err",
 	[NIC_PHY_CALC_BER] = "nic_phy_calc_ber",
@@ -1056,63 +1055,6 @@ static const struct file_operations debugfs_phy_set_nrz_fops = {
 	.write = debugfs_phy_set_nrz_write,
 };
 
-static ssize_t debugfs_write_coll_lag_size(struct file *f, const char __user *buf, size_t count,
-					   loff_t *ppos)
-{
-	struct hl_cn_device *hdev = file_inode(f)->i_private;
-	struct hl_cn_asic_funcs *asic_funcs;
-	u32 val;
-	int rc;
-
-	asic_funcs = hdev->asic_funcs;
-
-	/* For ASICs that don't support this feature, return an error */
-	if (!asic_funcs->write_coll_lag_size)
-		return -EINVAL;
-
-	rc = kstrtou32_from_user(buf, count, 10, &val);
-	if (rc)
-		return rc;
-
-	rc = asic_funcs->write_coll_lag_size(hdev, val);
-	if (rc)
-		return rc;
-
-	return count;
-}
-
-static ssize_t debugfs_read_coll_lag_size(struct file *f, char __user *buf, size_t count,
-					  loff_t *ppos)
-{
-	struct hl_cn_device *hdev = file_inode(f)->i_private;
-	struct hl_cn_asic_funcs *asic_funcs;
-	u32 coll_lag_size;
-	ssize_t rc;
-
-	asic_funcs = hdev->asic_funcs;
-
-	if (*ppos)
-		return 0;
-
-	/* For ASICs that don't support this feature, return an error */
-	if (!asic_funcs->read_coll_lag_size)
-		return -EINVAL;
-
-	rc = asic_funcs->read_coll_lag_size(hdev, &coll_lag_size);
-	if (rc)
-		return rc;
-
-	rc = simple_read_from_buffer(buf, count, ppos, &coll_lag_size, sizeof(coll_lag_size));
-
-	return rc;
-}
-
-static const struct file_operations debugfs_coll_lag_size_fops = {
-	.owner = THIS_MODULE,
-	.write = debugfs_write_coll_lag_size,
-	.read = debugfs_read_coll_lag_size,
-};
-
 static ssize_t debugfs_phy_dump_serdes_params_read(struct file *f, char __user *buf, size_t count,
 						   loff_t *ppos)
 {
@@ -1637,9 +1579,6 @@ static void __hl_cn_debugfs_dev_init(struct hl_cn_device *hdev, struct dentry *r
 
 	HL_CN_DEBUGFS_CREATE_FILE(NIC_PHY_SET_NRZ, 0444, root_dir, hdev,
 				  &debugfs_phy_set_nrz_fops);
-
-	HL_CN_DEBUGFS_CREATE_FILE(NIC_COLL_LAG_SIZE, 0644, root_dir, hdev,
-				  &debugfs_coll_lag_size_fops);
 
 	HL_CN_DEBUGFS_CREATE_FILE(NIC_PHY_DUMP_SERDES_PARAMS, 0444, root_dir, hdev,
 				  &debugfs_phy_dump_serdes_params_fops);
