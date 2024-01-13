@@ -408,9 +408,4 @@ void gaudi2_cn_phy_dump_serdes_params(struct hl_cn_device *hdev, char *buf, size
 void gaudi2_cn_get_mac_fec_stats(struct hl_cn_port *cn_port, u64 *data);
 bool gaudi2_cn_is_cq_in_overrun(struct hl_cn_port *cn_port, u8 cq_id);
 
-/* Bringup functions (w/o F/W support) */
-int gaudi2_cn_config_wqe_asid(struct hl_cn_port *cn_port, u32 asid, bool set_asid);
-void gaudi2_cn_override_phy_readiness(struct hl_cn_port *cn_port, bool set_ready);
-int gaudi2_cn_disable_wqe_index_checker_fw(struct hl_cn_port *cn_port);
-
 #endif /* GAUDI2_CN_H_ */

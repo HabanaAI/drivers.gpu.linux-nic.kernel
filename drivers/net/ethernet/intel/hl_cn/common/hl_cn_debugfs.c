@@ -41,9 +41,6 @@
 	} while (0)
 
 static char hl_cn_debugfs_names[][NAME_MAX] = {
-	[NIC_MAC_LOOPBACK] = "nic_mac_loopback",
-	[NIC_PCS_FAIL_TIME_FRAME] = "nic_pcs_fail_time_frame",
-	[NIC_PCS_FAIL_THRESHOLD] = "nic_pcs_fail_threshold",
 	[NIC_PAM4_TX_TAPS] = "nic_pam4_tx_taps",
 	[NIC_NRZ_TX_TAPS] = "nic_nrz_tx_taps",
 	[NIC_POLARITY] = "nic_polarity",
@@ -64,9 +61,6 @@ static char hl_cn_debugfs_names[][NAME_MAX] = {
 	[NIC_PHY_CALC_BER] = "nic_phy_calc_ber",
 	[NIC_PHY_CALC_BER_WAIT_SEC] = "nic_phy_calc_ber_wait_sec",
 	[NIC_OVERRIDE_PORT_STATUS] = "nic_override_port_status",
-	[NIC_WQE_INDEX_CHECKER] = "nic_wqe_index_checker",
-	[NIC_PHY_SPEED_RATE] = "nic_phy_speed_rate",
-	[NIC_PHY_TRAINING_TYPE] = "nic_phy_training_type",
 	[NIC_ACCUMULATE_FEC_DURATION] = "nic_accumulate_fec_duration"
 };
 
@@ -1228,193 +1222,6 @@ static const struct file_operations debugfs_override_port_status_fops = {
 	.write = debugfs_override_port_status_write,
 };
 
-static ssize_t debugfs_write_wqe_index_checker(struct file *f, const char __user *buf, size_t count,
-					       loff_t *ppos)
-{
-	struct hl_cn_device *hdev = file_inode(f)->i_private;
-	struct hl_cn_asic_funcs *asic_funcs;
-	u32 val;
-	int rc;
-
-	asic_funcs = hdev->asic_funcs;
-
-	/* For ASICs that don't support this feature, return an error */
-	if (!asic_funcs->set_wqe_index_checker)
-		return -EINVAL;
-
-	rc = kstrtou32_from_user(buf, count, 10, &val);
-	if (rc)
-		return rc;
-
-	rc = asic_funcs->set_wqe_index_checker(hdev, !!val);
-	if (rc)
-		return rc;
-
-	return count;
-}
-
-static ssize_t debugfs_read_wqe_index_checker(struct file *f, char __user *buf, size_t count,
-					      loff_t *ppos)
-{
-	struct hl_cn_device *hdev = file_inode(f)->i_private;
-	struct hl_cn_asic_funcs *asic_funcs;
-	u32 val;
-
-	asic_funcs = hdev->asic_funcs;
-
-	/* For ASICs that don't support this feature, return an error */
-	if (!asic_funcs->get_wqe_index_checker)
-		return -EINVAL;
-
-	snprintf((char *)&val, sizeof(val), "%u", asic_funcs->get_wqe_index_checker(hdev));
-
-	return simple_read_from_buffer(buf, count, ppos, &val, sizeof(val));
-}
-
-static const struct file_operations debugfs_wqe_index_checker_fops = {
-	.owner = THIS_MODULE,
-	.write = debugfs_write_wqe_index_checker,
-	.read = debugfs_read_wqe_index_checker,
-};
-
-static ssize_t debugfs_phy_speed_rate_write(struct file *f, const char __user *buf, size_t count,
-					    loff_t *ppos)
-{
-	struct hl_cn_device *hdev = file_inode(f)->i_private;
-	struct hl_cn_asic_funcs *asic_funcs;
-	u32 val, curr_phy_speed_rate;
-	int rc;
-
-	 asic_funcs = hdev->asic_funcs;
-
-	/* For ASICs that don't support this feature, return an error */
-	if (!asic_funcs->phy_speed_rate_write || !asic_funcs->phy_speed_rate_read)
-		return -EINVAL;
-
-	rc = kstrtou32_from_user(buf, count, 10, &val);
-	if (rc)
-		return rc;
-
-	curr_phy_speed_rate = asic_funcs->phy_speed_rate_read(hdev);
-
-	if (curr_phy_speed_rate == val)
-		return count;
-
-	rc = asic_funcs->phy_speed_rate_write(hdev, val);
-	if (rc)
-		return rc;
-
-	dev_info(hdev->dev, "PHY speed rate set to %d\n", val);
-
-	rc = hl_device_hard_reset_sync(hdev);
-	if (rc)
-		return rc;
-
-	return count;
-}
-
-static ssize_t debugfs_phy_speed_rate_read(struct file *f, char __user *buf, size_t count,
-					   loff_t *ppos)
-{
-	struct hl_cn_device *hdev = file_inode(f)->i_private;
-	struct hl_cn_asic_funcs *asic_funcs;
-	u32 phy_speed_rate;
-	char tmp_buf[32];
-	ssize_t rc;
-
-	asic_funcs = hdev->asic_funcs;
-
-	if (*ppos)
-		return 0;
-
-	 /* For ASICs that don't support this feature, return an error */
-	if (!asic_funcs->phy_speed_rate_read)
-		return -EINVAL;
-
-	phy_speed_rate = asic_funcs->phy_speed_rate_read(hdev);
-
-	snprintf(tmp_buf, sizeof(tmp_buf), "%u\n", phy_speed_rate);
-	rc = simple_read_from_buffer(buf, strlen(tmp_buf) + 1, ppos, tmp_buf,
-				     strlen(tmp_buf) + 1);
-
-	return rc;
-}
-
-static const struct file_operations debugfs_phy_speed_rate_fops = {
-	.owner = THIS_MODULE,
-	.write = debugfs_phy_speed_rate_write,
-	.read = debugfs_phy_speed_rate_read,
-};
-
-static ssize_t debugfs_phy_training_type_write(struct file *f, const char __user *buf,
-					       size_t count, loff_t *ppos)
-{
-	struct hl_cn_device *hdev = file_inode(f)->i_private;
-	struct hl_cn_asic_funcs *asic_funcs;
-	u32 val, curr_phy_training_type;
-	int rc;
-
-	 asic_funcs = hdev->asic_funcs;
-
-	/* For ASICs that don't support this feature, return an error */
-	if (!asic_funcs->phy_training_type_write || !asic_funcs->phy_training_type_read)
-		return -EINVAL;
-
-	rc = kstrtou32_from_user(buf, count, 10, &val);
-	if (rc)
-		return rc;
-
-	curr_phy_training_type = asic_funcs->phy_training_type_read(hdev);
-
-	if (curr_phy_training_type == val)
-		return count;
-
-	rc = asic_funcs->phy_training_type_write(hdev, val);
-	if (rc)
-		return rc;
-
-	dev_info(hdev->dev, "PHY training type set to %d\n", val);
-
-	rc = hl_device_hard_reset_sync(hdev);
-	if (rc)
-		return rc;
-
-	return count;
-}
-
-static ssize_t debugfs_phy_training_type_read(struct file *f, char __user *buf, size_t count,
-					      loff_t *ppos)
-{
-	struct hl_cn_device *hdev = file_inode(f)->i_private;
-	struct hl_cn_asic_funcs *asic_funcs;
-	u32 phy_training_type;
-	char tmp_buf[32];
-	ssize_t rc;
-
-	asic_funcs = hdev->asic_funcs;
-
-	if (*ppos)
-		return 0;
-
-	 /* For ASICs that don't support this feature, return an error */
-	if (!asic_funcs->phy_training_type_read)
-		return -EINVAL;
-
-	phy_training_type = asic_funcs->phy_training_type_read(hdev);
-
-	snprintf(tmp_buf, sizeof(tmp_buf), "%u\n", phy_training_type);
-	rc = simple_read_from_buffer(buf, strlen(tmp_buf) + 1, ppos, tmp_buf,
-				     strlen(tmp_buf) + 1);
-
-	return rc;
-}
-
-static const struct file_operations debugfs_phy_training_type_fops = {
-	.owner = THIS_MODULE,
-	.write = debugfs_phy_training_type_write,
-	.read = debugfs_phy_training_type_read,
-};
-
 static ssize_t debugfs_accumulate_fec_duration_write(struct file *f, const char __user *buf,
 						     size_t count, loff_t *ppos)
 {
@@ -1457,90 +1264,8 @@ static const struct file_operations debugfs_accumulate_fec_duration_fops = {
 	.read = debugfs_accumulate_fec_duration_read,
 };
 
-#define NIC_DEBUGFS(X, fmt, do_reset) \
-static ssize_t debugfs_##X##_read(struct file *f, char __user *buf, size_t count, loff_t *ppos) \
-{ \
-	struct hl_cn_device *hdev = file_inode(f)->i_private; \
-	char tmp_buf[32]; \
-	ssize_t rc; \
-\
-	if (*ppos) \
-		return 0; \
-\
-	snprintf(tmp_buf, sizeof(tmp_buf), fmt "\n", hdev->X); \
-	rc = simple_read_from_buffer(buf, strlen(tmp_buf) + 1, ppos, tmp_buf, \
-				     strlen(tmp_buf) + 1); \
-\
-	return rc; \
-} \
-\
-static ssize_t debugfs_##X##_write(struct file *f, const char __user *buf, size_t count, \
-				   loff_t *ppos) \
-{ \
-	struct hl_cn_device *hdev = file_inode(f)->i_private; \
-	u64 val, base; \
-	ssize_t ret; \
-	int rc; \
-\
-	if (!strcmp(fmt, "%d")) \
-		base = 10; \
-	else \
-		base = 16; \
-\
-	ret = kstrtoull_from_user(buf, count, base, &val); \
-	if (ret) \
-		return ret; \
-\
-	if (val == hdev->X) \
-		return count; \
-\
-	if (do_reset && hdev->debugfs_reset) { \
-		hdev->X = val; \
-		rc = hl_device_hard_reset_sync(hdev); \
-		if (rc) \
-			return rc; \
-\
-		return count; \
-	} \
-\
-	dev_info(hdev->dev, "CN reset for %s started\n", __stringify(X)); \
-\
-	__hl_cn_hard_reset_prepare(hdev, false, false); \
-\
-	__hl_cn_stop(hdev); \
-\
-	hdev->X = val; \
-\
-	rc = __hl_cn_ports_reopen(hdev); \
-	if (rc) \
-		dev_err(hdev->dev, "Failed to reopen CN device, %d\n", rc); \
-\
-	dev_info(hdev->dev, "CN reset for %s finished\n", __stringify(X)); \
-\
-	return count; \
-} \
-\
-static const struct file_operations debugfs_##X##_fops = { \
-	.owner = THIS_MODULE, \
-	.read = debugfs_##X##_read, \
-	.write = debugfs_##X##_write, \
-}
-
-NIC_DEBUGFS(mac_loopback, "0x%llx", true);
-NIC_DEBUGFS(pcs_fail_time_frame, "%d", false);
-NIC_DEBUGFS(pcs_fail_threshold, "%d", false);
-
 static void __hl_cn_debugfs_dev_init(struct hl_cn_device *hdev, struct dentry *root_dir)
 {
-	HL_CN_DEBUGFS_CREATE_FILE(NIC_MAC_LOOPBACK, 0644, root_dir, hdev,
-				  &debugfs_mac_loopback_fops);
-
-	HL_CN_DEBUGFS_CREATE_FILE(NIC_PCS_FAIL_TIME_FRAME, 0644, root_dir, hdev,
-				  &debugfs_pcs_fail_time_frame_fops);
-
-	HL_CN_DEBUGFS_CREATE_FILE(NIC_PCS_FAIL_THRESHOLD, 0644, root_dir, hdev,
-				  &debugfs_pcs_fail_threshold_fops);
-
 	HL_CN_DEBUGFS_CREATE_FILE(NIC_PAM4_TX_TAPS, 0444, root_dir, hdev,
 				  &debugfs_pam4_tx_taps_fops);
 
@@ -1593,15 +1318,6 @@ static void __hl_cn_debugfs_dev_init(struct hl_cn_device *hdev, struct dentry *r
 
 	HL_CN_DEBUGFS_CREATE_FILE(NIC_OVERRIDE_PORT_STATUS, 0200, root_dir, hdev,
 				  &debugfs_override_port_status_fops);
-
-	HL_CN_DEBUGFS_CREATE_FILE(NIC_WQE_INDEX_CHECKER, 0644, root_dir, hdev,
-				  &debugfs_wqe_index_checker_fops);
-
-	HL_CN_DEBUGFS_CREATE_FILE(NIC_PHY_SPEED_RATE, 0644, root_dir, hdev,
-				  &debugfs_phy_speed_rate_fops);
-
-	HL_CN_DEBUGFS_CREATE_FILE(NIC_PHY_TRAINING_TYPE, 0644, root_dir, hdev,
-				  &debugfs_phy_training_type_fops);
 
 	HL_CN_DEBUGFS_CREATE_FILE(NIC_ACCUMULATE_FEC_DURATION, 0644, root_dir, hdev,
 				  &debugfs_accumulate_fec_duration_fops);

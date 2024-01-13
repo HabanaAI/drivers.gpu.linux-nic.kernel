@@ -89,7 +89,6 @@ static int hdev_init(struct hl_aux_dev *aux_dev)
 	hdev->ports = ports;
 	hdev->pdev = aux_data->pdev;
 	hdev->dev = aux_data->dev;
-	hdev->driver_ver = aux_data->driver_ver;
 	hdev->ports_mask = aux_data->ports_mask;
 	hdev->auto_neg_mask = aux_data->auto_neg_mask;
 	hdev->max_num_of_ports = aux_data->max_num_of_ports;

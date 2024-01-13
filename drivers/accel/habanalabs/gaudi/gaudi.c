@@ -1619,10 +1619,10 @@ static int gaudi_late_init(struct hl_device *hdev)
 	}
 
 	if ((hdev->card_type == cpucp_card_type_pci) &&
-			(hdev->nic_ports_mask & 0x3)) {
+			(hdev->cn.ports_mask & 0x3)) {
 		dev_info(hdev->dev,
 			"PCI card detected, only 8 ports are enabled\n");
-		hdev->nic_ports_mask &= ~0x3;
+		hdev->cn.ports_mask &= ~0x3;
 
 		/* Stop and disable unused NIC QMANs */
 		WREG32(mmNIC0_QM0_GLBL_CFG1, NIC0_QM0_GLBL_CFG1_PQF_STOP_MASK |
@@ -3244,7 +3244,7 @@ static void gaudi_init_nic_qmans(struct hl_device *hdev)
 			mmNIC1_QM0_GLBL_CFG0 - mmNIC0_QM0_GLBL_CFG0;
 	int i, nic_id, internal_q_index;
 
-	if (!hdev->nic_ports_mask)
+	if (!hdev->cn.ports_mask)
 		return;
 
 	if (gaudi->hw_cap_initialized & HW_CAP_NIC_MASK)
@@ -3253,7 +3253,7 @@ static void gaudi_init_nic_qmans(struct hl_device *hdev)
 	dev_dbg(hdev->dev, "Initializing NIC QMANs\n");
 
 	for (nic_id = 0 ; nic_id < NIC_NUMBER_OF_ENGINES ; nic_id++) {
-		if (!(hdev->nic_ports_mask & (1 << nic_id))) {
+		if (!(hdev->cn.ports_mask & (1 << nic_id))) {
 			nic_offset += nic_delta_between_qmans;
 			if (nic_id & 1) {
 				nic_offset -= (nic_delta_between_qmans * 2);

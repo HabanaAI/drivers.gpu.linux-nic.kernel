@@ -127,8 +127,6 @@ int hl_cn_phy_init(struct hl_cn_port *cn_port)
 	}
 
 	if (!hdev->phy_config_fw) {
-		port_funcs->override_phy_readiness(cn_port, true);
-
 		/* If EQ is supported, it will take care of setting the port status */
 		if (!hdev->has_eq) {
 			cn_port->pcs_link = true;
@@ -171,7 +169,6 @@ void hl_cn_phy_fini(struct hl_cn_port *cn_port)
 	port_funcs = hdev->asic_funcs->port_funcs;
 
 	if (!hdev->phy_config_fw || cn_port->mac_loopback) {
-		port_funcs->override_phy_readiness(cn_port, false);
 		cn_port->pcs_link = false;
 		cn_port->eq_pcs_link = false;
 		return;

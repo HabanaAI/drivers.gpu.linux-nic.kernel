@@ -194,7 +194,6 @@ static int hdev_init(struct hl_aux_dev *aux_dev)
 	hdev->supports_coresight = aux_data->supports_coresight;
 	hdev->use_fw_serdes_info = aux_data->use_fw_serdes_info;
 	hdev->fw_ver = aux_data->fw_ver;
-	hdev->driver_ver = aux_data->driver_ver;
 	hdev->minor = aux_data->minor;
 	hdev->id = aux_data->id;
 	hdev->dram_size = aux_data->dram_size;
@@ -214,7 +213,6 @@ static int hdev_init(struct hl_aux_dev *aux_dev)
 	hdev->fw_app_cpu_boot_dev_sts0 = aux_data->fw_app_cpu_boot_dev_sts0;
 	hdev->fw_app_cpu_boot_dev_sts1 = aux_data->fw_app_cpu_boot_dev_sts1;
 	hdev->cpucp_checkers_shift = aux_data->cpucp_checkers_shift;
-	hdev->num_of_dies = aux_data->num_of_dies;
 	hdev->accumulate_fec_duration = ACCUMULATE_FEC_STATS_DURATION_MS;
 
 	hdev->poll_enable = poll_enable_param_was_set ? poll_enable : false;

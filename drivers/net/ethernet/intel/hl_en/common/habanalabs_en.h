@@ -136,7 +136,6 @@ struct hl_en_asic_funcs {
  * @ports: array of all ports manage common structures.
  * @aux_dev: pointer to auxiliary device.
  * @asic_specific: ASIC specific device structure.
- * @driver_ver: Kernel driver version.
  * @fw_ver: FW version.
  * @qsfp_eeprom: QSFPD EEPROM info.
  * @mac_addr: array of all MAC addresses.
@@ -170,7 +169,6 @@ struct hl_en_device {
 	struct hl_en_port *ports;
 	struct hl_aux_dev *aux_dev;
 	void *asic_specific;
-	char *driver_ver;
 	char *fw_ver;
 	char *qsfp_eeprom;
 	char *mac_addr;

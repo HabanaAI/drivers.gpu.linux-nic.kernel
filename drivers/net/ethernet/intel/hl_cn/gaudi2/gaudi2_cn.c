@@ -724,19 +724,6 @@ static void gaudi2_cn_macro_sw_fini(struct hl_cn_macro *cn_macro)
 {
 }
 
-static bool gaudi2_cn_can_unset_asid_cfg(struct hl_cn_device *hdev)
-{
-	struct gaudi2_cn_aux_ops *gaudi2_aux_ops;
-	struct hl_cn_aux_ops *aux_ops;
-	struct hl_aux_dev *aux_dev;
-
-	aux_dev = hdev->cn_aux_dev;
-	aux_ops = aux_dev->aux_ops;
-	gaudi2_aux_ops = aux_ops->asic_ops;
-
-	return gaudi2_aux_ops->can_unset_asid_cfg(aux_dev);
-}
-
 static int gaudi2_cn_set_pfc(struct hl_cn_port *cn_port)
 {
 	struct gaudi2_cn_port *gaudi2_port = cn_port->cn_specific;
@@ -2579,20 +2566,6 @@ static int gaudi2_user_wq_arr_set(struct hl_cn_device *hdev, struct hl_cni_user_
 			NIC_WREG32(NIC0_TXE0_WQE_USER_CFG,
 				   NIC_RREG32(NIC0_TXE0_WQE_USER_CFG) & ~(1 << 1));
 
-		/* Set secured ASID config. The security is enabled for WQs on HBM such that it can
-		 * be accessed only with process whose ASID is wqe_asid. Here we program ASID '0' so
-		 * that only the CN HW can access the WQs on HBM.
-		 * If there is no option to unset the ASID, we set ASID for both wq on host as well
-		 * as HBM. This way, we override the previous settings. Otherwise, there is a
-		 * provision to unset the previous ASID settings, so we set the ASID only in case of
-		 * WQ on HBM and unset it in the wq_arr_unset.
-		 */
-		if (!gaudi2_cn_can_unset_asid_cfg(hdev) || wqe_asid != ctx->asid) {
-			rc = gaudi2_cn_config_wqe_asid(cn_port, wqe_asid, true);
-			if (rc)
-				goto set_asid_fail;
-		}
-
 		rw_asid = (ctx->asid <<	ARC_FARM_KDMA_CTX_AXUSER_HB_ASID_RD_SHIFT) |
 			  (ctx->asid << ARC_FARM_KDMA_CTX_AXUSER_HB_ASID_WR_SHIFT);
 
@@ -2690,14 +2663,6 @@ static int gaudi2_user_wq_arr_set(struct hl_cn_device *hdev, struct hl_cni_user_
 	wq_arr_props->wq_mmu_bypass = phys_addr;
 
 	return 0;
-
-set_asid_fail:
-	if (phys_addr)
-		hl_cn_mem_destroy(hdev, mem_data.handle);
-	else
-		hl_cn_unreserve_dva_block(ctx, wq_arr_props->dva_base, wq_arr_props->dva_size);
-
-	return rc;
 }
 
 static int gaudi2_user_wq_arr_unset(struct hl_cn_ctx *ctx, struct hl_cn_port *cn_port, u32 type)
@@ -2715,9 +2680,6 @@ static int gaudi2_user_wq_arr_unset(struct hl_cn_ctx *ctx, struct hl_cn_port *cn
 		NIC_WREG32(NIC0_TXE0_SQ_BASE_ADDRESS_63_32_1, 0);
 		NIC_WREG32(NIC0_TXE0_SQ_BASE_ADDRESS_31_0_1, 0);
 		NIC_WREG32(NIC0_TXE0_LOG_MAX_WQ_SIZE_1, 0);
-
-		if (wq_arr_props->on_device_mem && gaudi2_cn_can_unset_asid_cfg(hdev))
-			gaudi2_cn_config_wqe_asid(cn_port, 0, false);
 	} else {
 		NIC_WREG32(NIC0_QPC0_RX_WQ_BASE_ADDR_63_32_1, 0);
 		NIC_WREG32(NIC0_QPC0_RX_WQ_BASE_ADDR_31_0_1, 0);
@@ -4077,10 +4039,7 @@ static int gaudi2_cn_sw_init(struct hl_cn_device *hdev)
 			     BIT(HL_CNI_OP_USER_CQ_ID_UNSET) |
 			     BIT(HL_CNI_OP_DUMP_QP);
 
-	hdev->debugfs_supp_mask = BIT(NIC_MAC_LOOPBACK) |
-				  BIT(NIC_PCS_FAIL_TIME_FRAME) |
-				  BIT(NIC_PCS_FAIL_THRESHOLD) |
-				  BIT(NIC_PAM4_TX_TAPS) |
+	hdev->debugfs_supp_mask = BIT(NIC_PAM4_TX_TAPS) |
 				  BIT(NIC_NRZ_TX_TAPS) |
 				  BIT(NIC_POLARITY) |
 				  BIT(NIC_QP) |
@@ -5039,7 +4998,7 @@ static void gaudi2_cn_user_ccq_set(struct hl_cn_port *cn_port, u64 ccq_device_ad
 
 	/* set enable + update-pi
 	 * set overrun-en to allow overrun of ci since a HW bug exist
-	 * in Gaudi2 which prevents updating ci. it will be solved in Gaudi3
+	 * in Gaudi2 which prevents updating ci.
 	 */
 	NIC_WREG32(NIC0_QPC0_CONG_QUE_CFG, NIC0_QPC0_CONG_QUE_CFG_ENABLE_MASK |
 		   NIC0_QPC0_CONG_QUE_CFG_OVERRUN_EN_MASK |
@@ -5323,17 +5282,6 @@ static int gaudi2_cn_get_hw_block_handle(struct hl_cn_device *hdev, u64 address,
 	return aux_ops->get_hw_block_handle(aux_dev, address, handle);
 }
 
-static int gaudi2_cn_user_mmap(struct hl_cn_device *hdev, struct hl_cn_ctx *ctx,
-			       struct vm_area_struct *vma)
-{
-	struct hl_aux_dev *aux_dev = hdev->cn_aux_dev;
-	struct hl_cn_aux_ops *aux_ops;
-
-	aux_ops = aux_dev->aux_ops;
-
-	return aux_ops->user_mmap(aux_dev, vma);
-}
-
 static struct hl_cn_asic_port_funcs gaudi2_cn_port_funcs = {
 	.port_hw_init = gaudi2_cn_port_hw_init,
 	.port_hw_fini = gaudi2_cn_port_hw_fini,
@@ -5379,12 +5327,10 @@ static struct hl_cn_asic_port_funcs gaudi2_cn_port_funcs = {
 	.user_ccq_unset = gaudi2_cn_user_ccq_unset,
 	.reset_mac_stats = gaudi2_cn_reset_mac_stats,
 	.collect_fec_stats = gaudi2_cn_debugfs_collect_fec_stats,
-	.disable_wqe_index_checker = gaudi2_cn_disable_wqe_index_checker_fw,
 	.get_status = gaudi2_cn_get_status,
 	.cfg_lock = gaudi2_cn_cfg_lock,
 	.cfg_unlock = gaudi2_cn_cfg_unlock,
 	.cfg_is_locked = gaudi2_cn_cfg_is_locked,
-	.override_phy_readiness = gaudi2_cn_override_phy_readiness,
 	.qp_pre_destroy = gaudi2_cn_qp_pre_destroy,
 	.qp_post_destroy = gaudi2_cn_qp_post_destroy,
 	.set_port_status = gaudi2_cn_set_port_status,
@@ -5430,7 +5376,6 @@ static struct hl_cn_asic_funcs gaudi2_cn_funcs = {
 	.late_init = gaudi2_cn_late_init,
 	.late_fini = gaudi2_cn_late_fini,
 	.get_hw_block_handle = gaudi2_cn_get_hw_block_handle,
-	.user_mmap = gaudi2_cn_user_mmap,
 	.dma_alloc_coherent = gaudi2_cn_dma_alloc_coherent,
 	.dma_free_coherent = gaudi2_cn_dma_free_coherent,
 	.port_funcs = &gaudi2_cn_port_funcs,

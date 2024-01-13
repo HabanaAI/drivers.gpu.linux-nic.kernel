@@ -119,9 +119,6 @@
 
 /* CN debugfs files enum */
 enum hl_cn_debugfs_files_idx {
-	NIC_MAC_LOOPBACK = 0,
-	NIC_PCS_FAIL_TIME_FRAME,
-	NIC_PCS_FAIL_THRESHOLD,
 	NIC_PAM4_TX_TAPS,
 	NIC_NRZ_TX_TAPS,
 	NIC_POLARITY,
@@ -771,12 +768,10 @@ struct hl_cni_user_cq_unset_in_params {
  * @user_ccq_unset: unset user congestion completion queue.
  * @reset_mac_stats: reset MAC statistics.
  * @collect_fec_stats: collect FEC statistics.
- * @disable_wqe_index_checker: Disable WQE index checker for both Rx and Tx.
  * @get_status: get status information for F/W.
  * @cfg_lock: acquire the port configuration lock.
  * @cfg_unlock: release the port configuration lock.
  * @cfg_is_locked: check if the port configuration lock is locked.
- * @override_phy_readiness: indicate if port's phy is ready or not, used for pldm and simulator.
  * @qp_pre_destroy: prepare for a QP destroy. Called under the cfg lock.
  * @qp_post_destroy: cleanup after a QP destroy. Called under the cfg lock.
  * @set_port_status: config port status before notifying user.
@@ -840,12 +835,10 @@ struct hl_cn_asic_port_funcs {
 	void (*user_ccq_unset)(struct hl_cn_port *cn_port, u32 *ccqn);
 	void (*reset_mac_stats)(struct hl_cn_port *cn_port);
 	void (*collect_fec_stats)(struct hl_cn_port *cn_port, char *buf, size_t size);
-	int (*disable_wqe_index_checker)(struct hl_cn_port *cn_port);
 	void (*get_status)(struct hl_cn_port *cn_port, struct hl_cn_cpucp_status *status);
 	void (*cfg_lock)(struct hl_cn_port *cn_port);
 	void (*cfg_unlock)(struct hl_cn_port *cn_port);
 	bool (*cfg_is_locked)(struct hl_cn_port *cn_port);
-	void (*override_phy_readiness)(struct hl_cn_port *cn_port, bool set_ready);
 	void (*qp_pre_destroy)(struct hl_cn_qp *qp);
 	void (*qp_post_destroy)(struct hl_cn_qp *qp);
 	void (*set_port_status)(struct hl_cn_port *cn_port, bool up);
@@ -896,7 +889,6 @@ struct hl_cn_asic_port_funcs {
  * @late_init: set post initialization properties, e.g., compute2cn ops.
  * @late_fini: clear post initialization properties, e.g., compute2cn ops.
  * @get_hw_block_handle: Map block and return its handle.
- * @user_mmap: Map memory allocated by the driver.
  * @hw_block_mmap: mmap a HW block with a given id.
  * @create_mem_ctx: create a HW memory context.
  * @destroy_mem_ctx: destroy a HW memory context.
@@ -959,8 +951,6 @@ struct hl_cn_asic_funcs {
 	void (*late_init)(struct hl_cn_device *hdev);
 	void (*late_fini)(struct hl_cn_device *hdev);
 	int (*get_hw_block_handle)(struct hl_cn_device *hdev, u64 address, u64 *handle);
-	int (*user_mmap)(struct hl_cn_device *hdev, struct hl_cn_ctx *ctx,
-			 struct vm_area_struct *vma);
 	int (*hw_block_mmap)(struct hl_cn_device *hdev, struct vm_area_struct *vma, u32 address,
 			     u32 block_size);
 	int (*create_mem_ctx)(struct hl_cn_ctx *ctx, u32 pasid, u64 page_tbl_addr);
@@ -1301,7 +1291,6 @@ struct hl_cn_properties {
  * @status_cmd: status packet command from FW.
  * @qp_reset_mode: Graceful/fast reset.
  * @fw_ver: FW version.
- * @driver_ver: driver version.
  * @mem_ids: an xarray holding all active memory handles.
  * @ctrl_op_mask: mask of supported control operations.
  * @ports_mask: mask of available ports.
@@ -1317,8 +1306,6 @@ struct hl_cn_properties {
  * @vendor_id: PCI vendor Id.
  * @pci_id: device PCI Id.
  * @pending_reset_long_timeout: Long timeout for pending hard reset to finish in seconds.
- * @pcs_fail_time_frame: time frame in seconds for detecting a loose PCS link.
- * @pcs_fail_threshold: threshold for detecting a loose PCS link.
  * @kernel_asid: kernel ASID.
  * @qp_drain_time: drain waiting time in seconds after QP invalidation.
  * @card_location: the OAM number in the HLS (relevant for PMC card type).
@@ -1374,8 +1361,6 @@ struct hl_cn_properties {
  * @phy_set_nrz: Set the PHY to NRZ mode (25Gbps speed).
  * @skip_phy_default_tx_taps_cfg: Used to skip re-configuration of the default tx_taps.
  * @cpucp_checkers_shift: CPUCP checkers flags shift.
- * @num_of_dies: Number of dies in the asic.
- * @mixed_qp_wq_types: Using mixed QP WQ types is supported.
  * @hw_stop_during_teardown: Stopping the HW should take place during device teardown.
  * @qp_wait_for_idle: Wait for QP to be idle.
  * @lpbk_pcs_cfg: Loopback configuration is done via PCS instead of the MAC channels.
@@ -1397,7 +1382,6 @@ struct hl_cn_device {
 	struct hl_cn_properties cn_props;
 	void *asic_specific;
 	char *fw_ver;
-	char *driver_ver;
 	struct hl_aux_dev *cn_aux_dev;
 	struct hl_aux_dev en_aux_dev;
 	struct hl_cn_qp_info qp_info;
@@ -1423,8 +1407,6 @@ struct hl_cn_device {
 	u32 vendor_id;
 	u32 pci_id;
 	u32 pending_reset_long_timeout;
-	u32 pcs_fail_time_frame;
-	u32 pcs_fail_threshold;
 	u32 kernel_asid;
 	u32 qp_drain_time;
 	u32 card_location;
@@ -1473,8 +1455,6 @@ struct hl_cn_device {
 	u8 phy_set_nrz;
 	u8 skip_phy_default_tx_taps_cfg;
 	u8 cpucp_checkers_shift;
-	u8 num_of_dies;
-	u8 mixed_qp_wq_types;
 	u8 hw_stop_during_teardown;
 	u8 qp_wait_for_idle;
 	u8 lpbk_pcs_cfg;
@@ -1545,7 +1525,6 @@ void hl_cn_unreserve_wq_dva(struct hl_cn_ctx *ctx, struct hl_cn_port *cn_port, u
 u32 hl_cn_get_wq_array_type(bool is_send);
 
 void hl_cn_track_port_reset(struct hl_cn_port *cn_port, u32 syndrome);
-int hl_cn_user_mmap(struct hl_cn_device *hdev, struct hl_cn_ctx *ctx, struct vm_area_struct *vma);
 
 /* Memory related functions */
 int hl_cn_mem_alloc(struct hl_cn_device *hdev, struct hl_cn_mem_data *mem_data);
@@ -1562,7 +1541,6 @@ void hl_cn_dram_writel(struct hl_cn_device *hdev, u32 val, u64 addr);
 u32 hl_cn_rreg(struct hl_cn_device *hdev, u32 reg);
 void hl_cn_wreg(struct hl_cn_device *hdev, u32 reg, u32 val);
 void hl_cn_get_frac_info(u64 numerator, u64 denominator, u64 *integer, u64 *exp);
-void hl_cn_set_priv_assertions(struct hl_cn_device *hdev, bool enable);
 
 bool hl_cn_eq_dispatcher_is_empty(struct hl_cn_ev_dq *dq);
 bool hl_cn_eq_dispatcher_is_full(struct hl_cn_ev_dq *dq);
@@ -1584,10 +1562,10 @@ int hl_cn_eq_dispatcher_unregister_ccq(struct hl_cn_port *cn_port, u32 asid, u32
 int hl_cn_eq_dispatcher_enqueue(struct hl_cn_port *cn_port, const struct hl_cn_eqe *eqe);
 int hl_cn_eq_dispatcher_enqueue_bcast(struct hl_cn_port *cn_port, const struct hl_cn_eqe *eqe);
 void hl_cn_eq_handler(struct hl_cn_port *cn_port);
-int hl_cn_ctx_init(struct hl_aux_dev *aux_dev, u32 asid);
-void hl_cn_ctx_fini(struct hl_aux_dev *aux_dev, u32 asid);
 int hl_cn_alloc_ring(struct hl_cn_device *hdev, struct hl_cn_ring *ring, int elem_size, int count);
 void hl_cn_free_ring(struct hl_cn_device *hdev, struct hl_cn_ring *ring);
+int hl_cn_control(struct hl_cn_device *hdev, u32 op, void *input, void *output,
+		  struct hl_cn_ctx *ctx);
 
 struct hl_cn_user_cq *hl_cn_user_cq_get(struct hl_cn_port *cn_port, u8 cq_id);
 int hl_cn_user_cq_put(struct hl_cn_user_cq *user_cq);

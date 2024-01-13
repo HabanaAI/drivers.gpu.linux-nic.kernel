@@ -330,7 +330,7 @@ out_err:
 
 static void set_driver_behavior_per_device(struct hl_device *hdev)
 {
-	hdev->nic_ports_mask = 0;
+	hdev->cn.ports_mask = 0;
 	hdev->fw_components = FW_TYPE_ALL_TYPES;
 	hdev->cpu_queues_enable = 1;
 	hdev->pldm = 0;

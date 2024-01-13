@@ -41,7 +41,6 @@ static void hl_en_ethtool_get_drvinfo(struct net_device *ndev, struct ethtool_dr
 	hdev = port->hdev;
 
 	strscpy(drvinfo->driver, HL_EN_NAME, sizeof(drvinfo->driver));
-	strscpy(drvinfo->version, hdev->driver_ver, sizeof(drvinfo->version));
 	strscpy(drvinfo->fw_version, hdev->fw_ver, sizeof(drvinfo->fw_version));
 
 	if (hdev->pdev)

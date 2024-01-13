@@ -1040,6 +1040,26 @@ out:
 	return rc;
 }
 
+int hl_fw_cpucp_nic_info_get(struct hl_device *hdev, dma_addr_t cpucp_nic_info_dma_addr)
+{
+	struct cpucp_packet pkt = {};
+	u64 result;
+	int rc;
+
+	pkt.ctl = cpu_to_le32(CPUCP_PACKET_NIC_INFO_GET <<
+				CPUCP_PKT_CTL_OPCODE_SHIFT);
+	pkt.addr = cpu_to_le64(cpucp_nic_info_dma_addr);
+	pkt.data_max_size = cpu_to_le32(sizeof(struct cpucp_nic_info));
+
+	rc = hdev->asic_funcs->send_cpu_message(hdev, (u32 *) &pkt, sizeof(pkt),
+					HL_CPUCP_INFO_TIMEOUT_USEC, &result);
+	if (rc)
+		dev_err(hdev->dev,
+			"Failed to handle CPU-CP NIC info pkt, error %d\n", rc);
+
+	return rc;
+}
+
 int hl_fw_cpucp_pci_counters_get(struct hl_device *hdev,
 		struct hl_info_pci_counters *counters)
 {

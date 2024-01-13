@@ -207,7 +207,7 @@ struct hl_cni_alloc_conn_out {
  * struct hl_cni_req_conn_ctx_in - NIC ioctl opcode HL_CNI_OP_SET_REQ_CONN_CTX in param
  * @dst_ip_addr: Destination IP address in native endianness
  * @dst_conn_id: Destination connection ID
- * @last_index: Unused, kept fot backward compatibility.
+ * @last_index: Index of last entry [2..(2^22)-1]
  * @port: NIC port ID
  * @conn_id: Connection ID
  * @dst_mac_addr: Destination MAC address
@@ -319,80 +319,6 @@ struct hl_cni_destroy_conn_in {
 };
 
 /**
- * enum hl_nic_cq_status - Status of the CQ, only HL_CNI_CQ_SUCCESS denotes a valid state.
- * @HL_CNI_CQ_SUCCESS: CQ has been and created and is operational
- * @HL_CNI_CQ_TIMEOUT: CQ polling has failed after the provided timeout and moved to invalid state
- * @HL_CNI_CQ_OVERFLOW: CQ is overflowed and moved to invalid state
- */
-enum hl_nic_cq_status {
-	HL_CNI_CQ_SUCCESS,
-	HL_CNI_CQ_TIMEOUT,
-	HL_CNI_CQ_OVERFLOW
-};
-
-/**
- * struct hl_cni_cq_create_in - NIC ioctl opcode HL_CNI_OP_CQ_CREATE in param
- * @cq_num_of_entries: Number of entries in the CQ buffer
- */
-struct hl_cni_cq_create_in {
-	__u32 cq_num_of_entries;
-	__u32 pad;
-};
-
-/**
- * struct hl_cni_cq_create_out - NIC ioctl opcode HL_CNI_OP_CQ_CREATE out param
- * @handle: Handle of the CQ buffer
- */
-struct hl_cni_cq_create_out {
-	__u64 handle;
-};
-
-/**
- * struct hl_cni_cq_destroy_in - NIC ioctl opcode HL_CNI_OP_CQ_DESTROY in param
- * @handle: Handle of the CQ buffer
- */
-struct hl_cni_cq_destroy_in {
-	__u64 handle;
-};
-
-/**
- * struct hl_cni_cq_update_consumed_cqes_in - NIC ioctl opcode HL_CNI_OP_CQ_UPDATE_CONSUMED_CQES in
- *                                            param
- * @handle: Handle of the CQ buffer
- * @cq_num_of_consumed_entries: Number of consumed CQEs
- */
-struct hl_cni_cq_update_consumed_cqes_in {
-	__u64 handle;
-	__u32 cq_num_of_consumed_entries;
-	__u32 pad;
-};
-
-/**
- * struct hl_cni_cq_poll_wait_in - NIC ioctl in param for opcodes: HL_CNI_OP_CQ_WAIT,
- *                                                                 HL_CNI_OP_CQ_POLL
- * @handle: Handle of the CQ buffer
- * @timeout_us: Absolute timeout to wait in microseconds
- */
-struct hl_cni_cq_poll_wait_in {
-	__u64 handle;
-	__u64 timeout_us;
-};
-
-/**
- * struct hl_cni_cq_poll_wait_out - NIC ioctl out param for opcodes: HL_CNI_OP_CQ_WAIT,
- *                                                                   HL_CNI_OP_CQ_POLL
- * @pi: CQE producer index - first CQE to consume
- * @num_of_cqes: Number of CQEs to consume, starting from pi
- * @status: Return status
- */
-struct hl_cni_cq_poll_wait_out {
-	__u32 pi;
-	__u32 num_of_cqes;
-	__u32 status;
-	__u32 pad;
-};
-
-/**
  * enum hl_nic_mem_type - NIC WQ memory allocation type
  * @HL_CNI_USER_WQ_SEND: Allocate memory for the user send WQ array
  * @HL_CNI_USER_WQ_RECV: Allocate memory for the user receive WQ array
@@ -426,7 +352,7 @@ enum hl_nic_swq_granularity {
 
 /**
  * struct hl_cni_user_wq_arr_set_in - NIC ioctl opcode HL_CNI_OP_USER_WQ_SET in param
- * @addr: Unused, kept for backward compatibility
+ * @addr: Deprecated
  * @port: NIC port ID
  * @num_of_wqs: Number of user WQs
  * @num_of_wq_entries: Number of entries per user WQ
@@ -461,40 +387,6 @@ struct hl_cni_user_wq_arr_set_out {
 struct hl_cni_user_wq_arr_unset_in {
 	__u32 port;
 	__u32 type;
-};
-
-/**
- * struct hl_cni_user_cq_set_in - NIC ioctl opcode HL_CNI_OP_USER_CQ_SET in param, relevant for
- *                                Gaudi only.
- * @addr: CQ buffer address.
- * @port: NIC port ID.
- * @num_of_cqes: Number of CQ entries in the buffer.
- */
-struct hl_cni_user_cq_set_in {
-	__u64 addr;
-	__u32 port;
-	__u32 num_of_cqes;
-};
-
-/**
- * struct hl_cni_user_cq_unset_in - NIC ioctl opcode HL_CNI_OP_USER_CQ_UNSET in param, relevant for
- *                                  Gaudi only.
- * @port: NIC port ID.
- */
-struct hl_cni_user_cq_unset_in {
-	__u32 port;
-	__u32 pad;
-};
-
-/**
- * struct hl_cni_user_cq_update_ci_in - NIC ioctl opcode HL_CNI_OP_USER_CQ_UPDATE_CI in param,
- *                                      relevant for Gaudi only.
- * @port: NIC port ID.
- * @ci: Consumer index value to update.
- */
-struct hl_cni_user_cq_update_ci_in {
-	__u32 port;
-	__u32 ci;
 };
 
 /**

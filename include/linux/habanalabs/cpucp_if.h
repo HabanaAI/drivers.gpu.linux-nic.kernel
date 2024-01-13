@@ -403,6 +403,7 @@ struct hl_eq_entry {
 		struct hl_eq_hbm_sei_data sei_data;	/* Gaudi2 HBM */
 		struct hl_eq_engine_arc_intr_data arc_data;
 		struct hl_eq_addr_dec_intr_data addr_dec;
+		struct hl_eq_nic_intr_cause nic_intr_cause;
 		__le64 data[7];
 	};
 };
@@ -727,6 +728,9 @@ enum pq_init_status {
  *
  * CPUCP_PACKET_NIC_INIT_TMR_MEM -
  *      Init HW timer related memory in HBM.
+ *
+ * CPUCP_PACKET_NIC_CLR_MEM -
+ *      Clear NIC related memory in HBM.
  */
 
 enum cpucp_packet_id {
@@ -797,6 +801,7 @@ enum cpucp_packet_id {
 	CPUCP_PACKET_INTS_REGISTER,		/* internal */
 	CPUCP_PACKET_NIC_INIT_TXS_MEM,		/* internal */
 	CPUCP_PACKET_NIC_INIT_TMR_MEM,		/* internal */
+	CPUCP_PACKET_NIC_CLR_MEM,		/* internal */
 	CPUCP_PACKET_ID_MAX			/* must be last */
 };
 
@@ -1499,6 +1504,20 @@ struct cpucp_cn_init_hw_mem_packet {
 	__le16 entry_size;
 	__le16 granularity;
 	__u8 pad[2];
+};
+
+/* structure cpucp_cn_clear_mem_packet - used for clearing the assoicated CN(Core NIC)
+ * memory in HBM using the provided parameters.
+ * @cpucp_pkt: basic cpucp packet, the rest of the parameters extend the packet.
+ * @mem_base_addr: base address of the assoicated memory
+ * @size: size in bytes of the assoicated memory.
+ * @pad: padding
+ */
+struct cpucp_cn_clear_mem_packet {
+	struct cpucp_packet cpucp_pkt;
+	__le64 mem_base_addr;
+	__le32 size;
+	__u8 pad[4];
 };
 
 #endif /* CPUCP_IF_H */

@@ -19,9 +19,6 @@
 
 #define HL_EN_MAX_HEADERS_SZ	(ETH_HLEN + 2 * VLAN_HLEN + ETH_FCS_LEN)
 
-#define PORT_LANES_2		2
-#define PORT_LANES_4		4
-
 /* driver specific value, should always be >= asic specific h/w resource */
 #define NIC_DRV_MAX_CQS_NUM	32
 #define NIC_DRV_MAX_CCQS_NUM	4
@@ -29,11 +26,9 @@
 
 /**
  * enum hl_cn_asic_type - supported ASIC types.
- * @ASIC_GAUDI: Gaudi device.
  * @ASIC_GAUDI2: Gaudi2 device.
  */
 enum hl_cn_asic_type {
-	HL_ASIC_GAUDI,
 	HL_ASIC_GAUDI2,
 };
 
@@ -87,48 +82,6 @@ struct hl_cn_stat {
 	int hi_offset;
 };
 
-/**
- * struct hl_cn_sim_properties - simulator properties for CN initialization (gaudi)
- * @nic_drv_addr: the base address of the memory in the device
- * @nic_drv_size: the size of the memory in the device
- * @nic_drv_base_addr: the aligned base address of the memory in the device
- * @nic_drv_end_addr: the aligned end address of the memory in the device
- * @sb_base_addr: the base address of a Tx eth pkt cyclic buffer
- * @swq_base_addr: the base address of a Tx workqueue cyclic buffer
- * @txs_base_addr: base address of the ports timer cfg
- * @tmr_base_addr: base address of the macros timer cfg
- * @req_qpc_base_addr: the base address of a requester (sender) QP context buffer
- * @res_qpc_base_addr: the base address of a responder (receiver) QP context buffer
- */
-struct hl_cn_sim_properties {
-	u64 nic_drv_addr;
-	u64 nic_drv_size;
-	u64 nic_drv_base_addr;
-	u64 nic_drv_end_addr;
-	u64 sb_base_addr;
-	u64 swq_base_addr;
-	u64 txs_base_addr;
-	u64 tmr_base_addr;
-	u64 req_qpc_base_addr;
-	u64 res_qpc_base_addr;
-};
-
-/**
- * struct hl_cn_port_statistics - Get Habana port statistics.
- * @str_buf_ptr: User space address of buffer to hold the counters names. Recommended size is
- *               HABANA_LINK_STR_LEN * HABANA_LINK_CNT_MAX_NUM.
- * @val_buf_ptr: User space address of buffer to hold the counters values. Recommended size is
- *               sizeof(__u64) * HABANA_LINK_CNT_MAX_NUM.
- * @num_of_stat: Number of counters that were actually fetched.
- * @pad: Padding to 64 bit.
- */
-struct hl_cn_port_statistics {
-	__u64 str_buf_ptr;
-	__u64 val_buf_ptr;
-	__u32 num_of_stat;
-	__u32 pad;
-};
-
 /*
  * struct hl_cn_cpucp_mac_addr - port MAC address received from FW.
  * @mac_addr: port MAC address.
@@ -166,7 +119,6 @@ struct hl_cn_cpucp_info {
  * @pdev: pointer to PCI device, can be NULL in case of simulator device.
  * @dev: related kernel basic device structure.
  * @asic_specific: ASIC specific data.
- * @driver_ver: Kernel driver version.
  * @fw_ver: FW version.
  * @asic_type: ASIC specific type.
  * @ports_mask: mask of available ports.
@@ -206,13 +158,11 @@ struct hl_cn_cpucp_info {
  * @mmu_enable: is MMU enabled.
  * @lanes_per_port: number of physical lanes per port.
  * @cpucp_checkers_shift: CPUCP checkers flags shift.
- * @num_of_dies: Number of dies in the asic.
  */
 struct hl_cn_aux_data {
 	struct pci_dev *pdev;
 	struct device *dev;
 	void *asic_specific;
-	char *driver_ver;
 	char *fw_ver;
 	enum hl_cn_asic_type asic_type;
 	u64 ports_mask;
@@ -246,7 +196,6 @@ struct hl_cn_aux_data {
 	u8 mmu_enable;
 	u8 lanes_per_port;
 	u8 cpucp_checkers_shift;
-	u8 num_of_dies;
 };
 
 /**
@@ -301,37 +250,22 @@ typedef bool (*hl_cn_poll_cond_func)(u32 val, void *arg);
  * @vm_unreserve_dva_block: Release a given device virtual block.
  * @get_hw_block_handle: Map block and return its handle.
  * @dma_mmap: Map DMA memory region.
- * @user_mmap: Map memory allocated by the driver.
  * @dram_readl: Read long from DRAM.
  * @dram_writel: Write long to DRAM.
  * @rreg: Read register.
  * @wreg: Write register.
- * @set_priv_assertions: Enable/disable privilege assertions.
  * @poll_reg: Poll on a register until a given condition is fulfilled or timeout.
  * @get_cpucp_info: fetch updated CPUCP info.
  * @send_cpu_message: send message to F/W. If the message is timedout, the driver will eventually
  *                    reset the device. The timeout is passed as an argument. If it is 0 the
  *                    timeout set is the default timeout for the specific ASIC.
  * @post_send_status: handler for post sending status packet to FW.
- * @register_cn_user_context: register a user context represented by user provided FD. If the
- *                            returned comp_handle and vm_handle are equal then this context doesn't
- *                            support data transfer.
- * @deregister_cn_user_context: de-register the user context represented by the vm_handle returned
- *                              from calling register_cn_user_context.
- * @vm_create: create a VM in registered context.
- * @vm_destroy: destroy a VM in registered context.
- * @get_vm_info: get information on a VM.
  * @ports_reopen: reopen the ports after hard reset.
  * @ports_stop_prepare: prepare the ports for a stop.
  * @ports_stop: stop traffic.
  * @synchronize_irqs: Synchronize IRQs.
- * @ctx_init: Initialize user context.
- * @ctx_fini: Cleanup user context.
  * @send_port_cpucp_status: Send port status to FW.
  * @mmap: Map CN memory.
- * @get_port_state: Get port link state (used by Gaudi1 only).
- * @get_port_statistics: Get port statistics (used by Gaudi1 only).
- * @cmd_control: command control IOCTL (used by Gaudi1 only).
  * @asic_ops: pointer for ASIC specific ops struct.
  */
 struct hl_cn_aux_ops {
@@ -361,12 +295,10 @@ struct hl_cn_aux_ops {
 	int (*get_hw_block_handle)(struct hl_aux_dev *aux_dev, u64 address, u64 *handle);
 	int (*dma_mmap)(struct hl_aux_dev *aux_dev, struct vm_area_struct *vma, void *cpu_addr,
 			dma_addr_t dma_addr, size_t size);
-	int (*user_mmap)(struct hl_aux_dev *aux_dev, struct vm_area_struct *vma);
 	u32 (*dram_readl)(struct hl_aux_dev *aux_dev, u64 addr);
 	void (*dram_writel)(struct hl_aux_dev *aux_dev, u32 val, u64 addr);
 	u32 (*rreg)(struct hl_aux_dev *aux_dev, u32 reg);
 	void (*wreg)(struct hl_aux_dev *aux_dev, u32 reg, u32 val);
-	void (*set_priv_assertions)(struct hl_aux_dev *aux_dev, bool enable);
 	int (*poll_reg)(struct hl_aux_dev *aux_dev, u32 reg, u64 timeout_us,
 			hl_cn_poll_cond_func func, void *arg);
 	void (*get_cpucp_info)(struct hl_aux_dev *aux_dev,
@@ -374,27 +306,14 @@ struct hl_cn_aux_ops {
 	int (*send_cpu_message)(struct hl_aux_dev *aux_dev, u32 *msg, u16 len, u32 timeout,
 				u64 *result);
 	void (*post_send_status)(struct hl_aux_dev *aux_dev, u32 port);
-	int (*register_cn_user_context)(struct hl_aux_dev *aux_dev, int user_fd,
-					const void *cn_ctx, u64 *comp_handle, u64 *vm_handle);
-	void (*deregister_cn_user_context)(struct hl_aux_dev *aux_dev, u64 vm_handle);
-	int (*vm_create)(struct hl_aux_dev *aux_dev, u64 comp_handle, u32 flags, u64 *vm_handle);
-	void (*vm_destroy)(struct hl_aux_dev *aux_dev, u64 vm_handle);
-	int (*get_vm_info)(struct hl_aux_dev *aux_dev, u64 vm_handle,
-			   struct hl_cn_vm_info *vm_info);
 
 	/* accel2cn */
 	int (*ports_reopen)(struct hl_aux_dev *aux_dev);
 	void (*ports_stop_prepare)(struct hl_aux_dev *aux_dev, bool fw_reset, bool in_teardown);
 	void (*ports_stop)(struct hl_aux_dev *aux_dev);
 	void (*synchronize_irqs)(struct hl_aux_dev *aux_dev);
-	int (*ctx_init)(struct hl_aux_dev *aux_dev, u32 asid);
-	void (*ctx_fini)(struct hl_aux_dev *aux_dev, u32 asid);
 	int (*send_port_cpucp_status)(struct hl_aux_dev *aux_dev, u32 port, u8 cmd, u8 period);
 	int (*mmap)(struct hl_aux_dev *aux_dev, u32 asid, struct vm_area_struct *vma);
-	int (*get_port_state)(struct hl_aux_dev *aux_dev, u32 port, bool *up);
-	int (*get_port_statistics)(struct hl_aux_dev *aux_dev, u32 port,
-					struct hl_cn_port_statistics *out);
-	int (*cmd_control)(struct hl_aux_dev *aux_dev, u32 op, void *input, void *output, u32 asid);
 	void *asic_ops;
 };
 

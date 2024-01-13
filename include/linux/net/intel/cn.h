@@ -128,7 +128,6 @@ struct hl_cn_ring {
  * @pdev: pointer to PCI device, can be NULL in case of simulator device.
  * @dev: related kernel basic device structure.
  * @asic_specific: ASIC specific data.
- * @driver_ver: Kernel driver version.
  * @fw_ver: FW version.
  * @qsfp_eeprom: QSFPD EEPROM info.
  * @mac_addr: array of all MAC addresses.
@@ -149,7 +148,6 @@ struct hl_en_aux_data {
 	struct pci_dev *pdev;
 	struct device *dev;
 	void *asic_specific;
-	char *driver_ver;
 	char *fw_ver;
 	char *qsfp_eeprom;
 	char **mac_addr;
