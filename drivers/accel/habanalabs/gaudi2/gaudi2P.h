@@ -91,7 +91,7 @@
 
 #define GAUDI2_BOOT_FIT_REQ_TIMEOUT_USEC	10000000	/* 10s */
 
-#define GAUDI2_NIC_CLK_FREQ			450000000ull	/* 450 MHz */
+#define GAUDI2_NIC_CLK_FREQ			488000000ull	/* 488 MHz */
 
 #define DC_POWER_DEFAULT			60000		/* 60W */
 
@@ -565,6 +565,8 @@ struct gaudi2_device {
 	u32				events_stat[GAUDI2_EVENT_SIZE];
 	u32				events_stat_aggregate[GAUDI2_EVENT_SIZE];
 	u32				num_of_valid_hw_events;
+
+	/* NIC fields */
 	struct gaudi2_cn_aux_ops	cn_aux_ops;
 	struct gaudi2_cn_aux_data	cn_aux_data;
 

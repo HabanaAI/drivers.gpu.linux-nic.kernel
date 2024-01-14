@@ -32,7 +32,6 @@ struct gaudi2_cn_aux_data {
 
 /**
  * struct gaudi2_cn_aux_ops - ASIC specific functions for cn <-> accel drivers communication.
- * @can_unset_asid_cfg: is ASID cfg can be unset.
  * @get_event_name: Translate event type to name.
  * @poll_mem: Poll on a memory address until a given condition is fulfilled or timeout.
  * @reset_prepare: Prepare to reset.
@@ -43,7 +42,6 @@ struct gaudi2_cn_aux_data {
  */
 struct gaudi2_cn_aux_ops {
 	/* cn2accel */
-	bool (*can_unset_asid_cfg)(struct hl_aux_dev *aux_dev);
 	char *(*get_event_name)(struct hl_aux_dev *aux_dev, u16 event_type);
 	int (*poll_mem)(struct hl_aux_dev *aux_dev, u32 *addr, u32 *val,
 			hl_cn_poll_cond_func func);

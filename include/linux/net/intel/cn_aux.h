@@ -48,10 +48,12 @@ enum hl_cn_status_cmd {
  * enum hl_aux_dev_type - auxiliary device type.
  * HL_AUX_DEV_CN: Shared Network Interface.
  * HL_AUX_DEV_ETH: Ethernet.
+ * HL_AUX_DEV_IB: InfiniBand.
  */
 enum hl_aux_dev_type {
 	HL_AUX_DEV_CN,
 	HL_AUX_DEV_ETH,
+	HL_AUX_DEV_IB,
 };
 
 /**
@@ -250,6 +252,7 @@ typedef bool (*hl_cn_poll_cond_func)(u32 val, void *arg);
  * @vm_unreserve_dva_block: Release a given device virtual block.
  * @get_hw_block_handle: Map block and return its handle.
  * @dma_mmap: Map DMA memory region.
+ * @user_mmap: Map memory allocated by the driver.
  * @dram_readl: Read long from DRAM.
  * @dram_writel: Write long to DRAM.
  * @rreg: Read register.
@@ -260,6 +263,14 @@ typedef bool (*hl_cn_poll_cond_func)(u32 val, void *arg);
  *                    reset the device. The timeout is passed as an argument. If it is 0 the
  *                    timeout set is the default timeout for the specific ASIC.
  * @post_send_status: handler for post sending status packet to FW.
+ * @register_cn_user_context: register a user context represented by user provided FD. If the
+ *                            returned comp_handle and vm_handle are equal then this context doesn't
+ *                            support data transfer.
+ * @deregister_cn_user_context: de-register the user context represented by the vm_handle returned
+ *                              from calling register_cn_user_context.
+ * @vm_create: create a VM in registered context.
+ * @vm_destroy: destroy a VM in registered context.
+ * @get_vm_info: get information on a VM.
  * @ports_reopen: reopen the ports after hard reset.
  * @ports_stop_prepare: prepare the ports for a stop.
  * @ports_stop: stop traffic.
@@ -295,6 +306,7 @@ struct hl_cn_aux_ops {
 	int (*get_hw_block_handle)(struct hl_aux_dev *aux_dev, u64 address, u64 *handle);
 	int (*dma_mmap)(struct hl_aux_dev *aux_dev, struct vm_area_struct *vma, void *cpu_addr,
 			dma_addr_t dma_addr, size_t size);
+	int (*user_mmap)(struct hl_aux_dev *aux_dev, struct vm_area_struct *vma);
 	u32 (*dram_readl)(struct hl_aux_dev *aux_dev, u64 addr);
 	void (*dram_writel)(struct hl_aux_dev *aux_dev, u32 val, u64 addr);
 	u32 (*rreg)(struct hl_aux_dev *aux_dev, u32 reg);
@@ -306,6 +318,13 @@ struct hl_cn_aux_ops {
 	int (*send_cpu_message)(struct hl_aux_dev *aux_dev, u32 *msg, u16 len, u32 timeout,
 				u64 *result);
 	void (*post_send_status)(struct hl_aux_dev *aux_dev, u32 port);
+	int (*register_cn_user_context)(struct hl_aux_dev *aux_dev, int user_fd,
+					const void *cn_ctx, u64 *comp_handle, u64 *vm_handle);
+	void (*deregister_cn_user_context)(struct hl_aux_dev *aux_dev, u64 vm_handle);
+	int (*vm_create)(struct hl_aux_dev *aux_dev, u64 comp_handle, u32 flags, u64 *vm_handle);
+	void (*vm_destroy)(struct hl_aux_dev *aux_dev, u64 vm_handle);
+	int (*get_vm_info)(struct hl_aux_dev *aux_dev, u64 vm_handle,
+			   struct hl_cn_vm_info *vm_info);
 
 	/* accel2cn */
 	int (*ports_reopen)(struct hl_aux_dev *aux_dev);

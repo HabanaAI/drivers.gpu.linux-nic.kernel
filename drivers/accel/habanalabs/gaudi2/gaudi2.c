@@ -6564,6 +6564,12 @@ skip_reset:
 			gaudi2_poll_btm_indication(hdev, poll_timeout_us);
 	}
 
+	/* On PLDM the NIC PHY link is always up, and because the NIC interrupts are enabled by
+	 * default - need to disable the interrupts ASAP.
+	 */
+	if (hard_reset && hdev->pldm)
+		gaudi2_cn_disable_interrupts(hdev);
+
 	if (!gaudi2)
 		return 0;
 

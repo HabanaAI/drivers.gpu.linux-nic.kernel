@@ -270,11 +270,6 @@ static int gaudi2_cn_pre_core_init(struct hl_device *hdev)
 	return 0;
 }
 
-static bool gaudi2_cn_can_unset_asid_cfg(struct hl_aux_dev *aux_dev)
-{
-	return true;
-}
-
 static char *gaudi2_cn_get_event_name(struct hl_aux_dev *aux_dev, u16 event_type)
 {
 	return gaudi2_irq_map_table[event_type].valid ? gaudi2_irq_map_table[event_type].name :
@@ -314,7 +309,6 @@ static void gaudi2_cn_set_cn_data(struct hl_device *hdev)
 	gaudi2_aux_data->sob_inc_cfg_val = GAUDI2_SOB_INCREMENT_BY_ONE;
 
 	/* cn2accel */
-	gaudi2_aux_ops->can_unset_asid_cfg = gaudi2_cn_can_unset_asid_cfg;
 	gaudi2_aux_ops->get_event_name = gaudi2_cn_get_event_name;
 	gaudi2_aux_ops->poll_mem = gaudi2_cn_poll_mem;
 }

@@ -118,6 +118,7 @@ int hl_cn_reopen(struct hl_device *hdev);
 int hl_cn_send_status(struct hl_device *hdev, int port, u8 cmd, u8 period);
 void hl_cn_hard_reset_prepare(struct hl_device *hdev, bool fw_reset);
 void hl_cn_synchronize_irqs(struct hl_device *hdev);
+int hl_cn_mmap(struct hl_device *hdev, u32 asid, struct vm_area_struct *vma);
 int hl_cn_cpucp_info_get(struct hl_device *hdev);
 
 #endif /* CN_H_ */
