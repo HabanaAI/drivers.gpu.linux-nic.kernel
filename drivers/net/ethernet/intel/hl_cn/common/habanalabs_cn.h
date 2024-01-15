@@ -67,18 +67,15 @@
 #define NIC_TMR_TIMEOUT_DEFAULT_GRAN	13
 #define NIC_TMR_TIMEOUT_MAX_GRAN	31
 
-#define PARSE_FIELD(data, shift, size)	(((data) >> (shift)) & (BIT(size) - 1))
-#define MERGE_FIELDS(data_hi, data_lo, shift)	\
-					((data_hi) << (shift) | (data_lo))
+#define PARSE_FIELD(data, shift, size)		(((data) >> (shift)) & (BIT(size) - 1))
+#define MERGE_FIELDS(data_hi, data_lo, shift)	((data_hi) << (shift) | (data_lo))
 
 #define NIC_MACRO_CFG_SIZE		hdev->cn_props.macro_cfg_size
 #define NIC_MACRO_CFG_BASE(port)	(NIC_MACRO_CFG_SIZE * ((port) >> 1))
 
-#define NIC_MACRO_RREG32(reg) RREG32(NIC_MACRO_CFG_BASE(port) + (reg))
-#define NIC_MACRO_WREG32(reg, val) \
-				WREG32(NIC_MACRO_CFG_BASE(port) + (reg), (val))
-#define NIC_MACRO_RMWREG32(reg, val, mask) \
-			RMWREG32(NIC_MACRO_CFG_BASE(port) + (reg), val, mask)
+#define NIC_MACRO_RREG32(reg) 		RREG32(NIC_MACRO_CFG_BASE(port) + (reg))
+#define NIC_MACRO_WREG32(reg, val) 	WREG32(NIC_MACRO_CFG_BASE(port) + (reg), (val))
+#define NIC_MACRO_RMWREG32(reg, val, mask) RMWREG32(NIC_MACRO_CFG_BASE(port) + (reg), val, mask)
 
 #define NIC_PORT_CHECK_ENABLE	BIT(0)
 #define NIC_PORT_CHECK_OPEN	BIT(1)
@@ -140,8 +137,6 @@ enum hl_cn_debugfs_files_idx {
 	NIC_PHY_CALC_BER_WAIT_SEC,
 	NIC_OVERRIDE_PORT_STATUS,
 	NIC_WQE_INDEX_CHECKER,
-	NIC_PHY_SPEED_RATE,
-	NIC_PHY_TRAINING_TYPE,
 	NIC_ACCUMULATE_FEC_DURATION,
 };
 
@@ -748,6 +743,7 @@ struct hl_cni_user_cq_unset_in_params {
  * @unregister_qp: unregister a qp.
  * @get_qp_id_range: Get unsecure QP ID range.
  * @eq_poll: poll the EQ for asid/app-specific events.
+ * @eq_dispatcher_select_dq: get event dispatch queue.
  * @get_db_fifo_id_range: Get unsecure userspace doorbell ID range.
  * @db_fifo_set: Config unsecure userspace doorbell fifo.
  * @db_fifo_unset: Destroy unsecure userspace doorbell fifo.
@@ -768,6 +764,7 @@ struct hl_cni_user_cq_unset_in_params {
  * @user_ccq_unset: unset user congestion completion queue.
  * @reset_mac_stats: reset MAC statistics.
  * @collect_fec_stats: collect FEC statistics.
+ * @disable_wqe_index_checker: Disable WQE index checker for both Rx and Tx.
  * @get_status: get status information for F/W.
  * @cfg_lock: acquire the port configuration lock.
  * @cfg_unlock: release the port configuration lock.
@@ -795,7 +792,7 @@ struct hl_cn_asic_port_funcs {
 	void (*user_cq_destroy)(struct hl_cn_user_cq *user_cq);
 	void (*user_cq_update_ci)(struct hl_cn_port *cn_port, u32 ci);
 	int (*get_cnts_num)(struct hl_cn_port *cn_port);
-	void (*get_cnts_names)(struct hl_cn_port *cn_port, u8 *data);
+	void (*get_cnts_names)(struct hl_cn_port *cn_port, u8 *data, bool ext);
 	void (*get_cnts_values)(struct hl_cn_port *cn_port, u64 *data);
 	int (*port_sw_init)(struct hl_cn_port *cn_port);
 	void (*port_sw_fini)(struct hl_cn_port *cn_port);
@@ -835,6 +832,7 @@ struct hl_cn_asic_port_funcs {
 	void (*user_ccq_unset)(struct hl_cn_port *cn_port, u32 *ccqn);
 	void (*reset_mac_stats)(struct hl_cn_port *cn_port);
 	void (*collect_fec_stats)(struct hl_cn_port *cn_port, char *buf, size_t size);
+	int (*disable_wqe_index_checker)(struct hl_cn_port *cn_port);
 	void (*get_status)(struct hl_cn_port *cn_port, struct hl_cn_cpucp_status *status);
 	void (*cfg_lock)(struct hl_cn_port *cn_port);
 	void (*cfg_unlock)(struct hl_cn_port *cn_port);
@@ -848,7 +846,6 @@ struct hl_cn_asic_port_funcs {
 
 /**
  * struct hl_cn_asic_funcs - ASIC specific functions that are can be called from common code.
- * @pre_core_init: initializations to be done only once on device probe.
  * @core_init: core infrastructure init.
  * @core_fini: core infrastructure cleanup.
  * @get_default_port_speed: get the default port BW in MB/s.
@@ -880,8 +877,10 @@ struct hl_cn_asic_port_funcs {
  * @synchronize_irqs: Wait for pending IRQ handlers (on other CPUs).
  * @phy_dump_serdes_params: dump the serdes parameters.
  * @get_max_msg_sz: get maximum message size.
+ * @qp_syndrome_to_str: convert a QP error syndrome to an error string.
  * @app_params_clear: clear app params.
  * @inject_rx_err: Force RX packet drops.
+ * @is_encap_supported: true if encapsulation is supported according to the given parameters.
  * @set_wqe_index_checker: set wqe index checker (enable/disable).
  * @get_wqe_index_checker: get wqe index checker (enabled/disabled).
  * @set_static_properties: Sets static CN properties.
@@ -889,19 +888,15 @@ struct hl_cn_asic_port_funcs {
  * @late_init: set post initialization properties, e.g., compute2cn ops.
  * @late_fini: clear post initialization properties, e.g., compute2cn ops.
  * @get_hw_block_handle: Map block and return its handle.
+ * @user_mmap: Map memory allocated by the driver.
  * @hw_block_mmap: mmap a HW block with a given id.
  * @create_mem_ctx: create a HW memory context.
  * @destroy_mem_ctx: destroy a HW memory context.
- * @phy_speed_rate_write: set PHY speed rate ID.
- * @phy_speed_rate_read: get PHY speed rate ID.
- * @phy_training_type_write: set PHY training type ID.
- * @phy_training_type_read: get PHY training type ID.
- * @port_funcs: functions called from common code for a specific port.
  * @dma_alloc_coherent: Allocate coherent DMA memory.
  * @dma_free_coherent: Free coherent DMA memory.
+ * @port_funcs: functions called from common code for a specific port.
  */
 struct hl_cn_asic_funcs {
-	int (*pre_core_init)(struct hl_cn_device *hdev);
 	int (*core_init)(struct hl_cn_device *hdev);
 	void (*core_fini)(struct hl_cn_device *hdev);
 	u32 (*get_default_port_speed)(struct hl_cn_device *hdev);
@@ -951,14 +946,12 @@ struct hl_cn_asic_funcs {
 	void (*late_init)(struct hl_cn_device *hdev);
 	void (*late_fini)(struct hl_cn_device *hdev);
 	int (*get_hw_block_handle)(struct hl_cn_device *hdev, u64 address, u64 *handle);
+	int (*user_mmap)(struct hl_cn_device *hdev, struct hl_cn_ctx *ctx,
+			 struct vm_area_struct *vma);
 	int (*hw_block_mmap)(struct hl_cn_device *hdev, struct vm_area_struct *vma, u32 address,
 			     u32 block_size);
 	int (*create_mem_ctx)(struct hl_cn_ctx *ctx, u32 pasid, u64 page_tbl_addr);
 	void (*destroy_mem_ctx)(struct hl_cn_ctx *ctx, u32 pasid, u64 page_tbl_addr);
-	int (*phy_speed_rate_write)(struct hl_cn_device *hdev, u32 speed_rate_id);
-	u32 (*phy_speed_rate_read)(struct hl_cn_device *hdev);
-	int (*phy_training_type_write)(struct hl_cn_device *hdev, u32 training_type_id);
-	u32 (*phy_training_type_read)(struct hl_cn_device *hdev);
 	void *(*dma_alloc_coherent)(struct hl_cn_device *hdev, size_t size, dma_addr_t *dma_handle,
 				    gfp_t flag);
 	void (*dma_free_coherent)(struct hl_cn_device *hdev, size_t size, void *cpu_addr,
@@ -1175,7 +1168,6 @@ struct hl_cn_ctx {
 	u64 comp_handle;
 	u32 asid;
 	u32 user_asid;
-	u8 killed;
 	u8 deallocated;
 };
 
@@ -1283,6 +1275,7 @@ struct hl_cn_properties {
  * @asic_specific: ASIC specific information to use only from ASIC files.
  * @cn_aux_dev: pointer to CN auxiliary device.
  * @en_aux_dev: Ethernet auxiliary device.
+ * @ib_aux_dev: InfiniBand auxiliary device.
  * @qp_info: details of a QP to read via debugfs.
  * @wqe_info: details of a WQE to read via debugfs.
  * @ctx: user context. TODO: SW-156182 - remove this
@@ -1352,6 +1345,7 @@ struct hl_cn_properties {
  * @eth_loopback: enable hack in hl_en_handle_tx to test eth traffic.
  * @lanes_per_port: number of physical lanes per port.
  * @is_eth_aux_dev_initialized: true if the eth auxiliary device is initialized.
+ * @is_ib_aux_dev_initialized: true if the IB auxiliary device is initialized.
  * @rx_drop_percent: RX packet drop percentage set via debugfs.
  * @rand_status: randomize the FW status counters (used for testing).
  * @status_period: periodic time in secs at which FW expects status packet.
@@ -1366,7 +1360,7 @@ struct hl_cn_properties {
  * @lpbk_pcs_cfg: Loopback configuration is done via PCS instead of the MAC channels.
  * @hw_invalid_while_teardown: HW is unavailable during device teardown.
  * @umr_support: device supports UMR.
- * @multi_ctx_support: device supports multiple contexts.
+ * @ib_device_opened: Is true if IB deviced has been opened.
  */
 struct hl_cn_device {
 	struct pci_dev *pdev;
@@ -1384,6 +1378,7 @@ struct hl_cn_device {
 	char *fw_ver;
 	struct hl_aux_dev *cn_aux_dev;
 	struct hl_aux_dev en_aux_dev;
+	struct hl_aux_dev ib_aux_dev;
 	struct hl_cn_qp_info qp_info;
 	struct hl_cn_wqe_info wqe_info;
 	struct hl_cn_ctx *ctx;
@@ -1446,6 +1441,7 @@ struct hl_cn_device {
 	u8 eth_loopback;
 	u8 lanes_per_port;
 	u8 is_eth_aux_dev_initialized;
+	u8 is_ib_aux_dev_initialized;
 	u8 rx_drop_percent;
 	u8 rand_status;
 	u8 status_period;
@@ -1460,7 +1456,7 @@ struct hl_cn_device {
 	u8 lpbk_pcs_cfg;
 	u8 hw_invalid_while_teardown;
 	u8 umr_support;
-	u8 multi_ctx_support;
+	u8 ib_device_opened;
 };
 
 static inline void hl_cn_strtolower(char *str)
@@ -1525,6 +1521,7 @@ void hl_cn_unreserve_wq_dva(struct hl_cn_ctx *ctx, struct hl_cn_port *cn_port, u
 u32 hl_cn_get_wq_array_type(bool is_send);
 
 void hl_cn_track_port_reset(struct hl_cn_port *cn_port, u32 syndrome);
+int hl_cn_user_mmap(struct hl_cn_device *hdev, struct hl_cn_ctx *ctx, struct vm_area_struct *vma);
 
 /* Memory related functions */
 int hl_cn_mem_alloc(struct hl_cn_device *hdev, struct hl_cn_mem_data *mem_data);
@@ -1564,11 +1561,10 @@ int hl_cn_eq_dispatcher_enqueue_bcast(struct hl_cn_port *cn_port, const struct h
 void hl_cn_eq_handler(struct hl_cn_port *cn_port);
 int hl_cn_alloc_ring(struct hl_cn_device *hdev, struct hl_cn_ring *ring, int elem_size, int count);
 void hl_cn_free_ring(struct hl_cn_device *hdev, struct hl_cn_ring *ring);
-int hl_cn_control(struct hl_cn_device *hdev, u32 op, void *input, void *output,
-		  struct hl_cn_ctx *ctx);
 
 struct hl_cn_user_cq *hl_cn_user_cq_get(struct hl_cn_port *cn_port, u8 cq_id);
 int hl_cn_user_cq_put(struct hl_cn_user_cq *user_cq);
+bool hl_cn_is_ibdev(struct hl_cn_device *hdev);
 
 void gaudi2_cn_set_asic_funcs(struct hl_cn_device *hdev);
 

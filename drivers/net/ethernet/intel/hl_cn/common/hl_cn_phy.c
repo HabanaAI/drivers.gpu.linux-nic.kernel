@@ -63,11 +63,13 @@ void hl_cn_phy_set_port_status(struct hl_cn_port *cn_port, bool up)
 	struct hl_en_aux_ops *aux_ops;
 	struct hl_aux_dev *aux_dev;
 	u32 port = cn_port->port;
+	bool is_ibdev;
 	int rc;
 
 	aux_dev = &hdev->en_aux_dev;
 	aux_ops = aux_dev->aux_ops;
 	port_funcs = hdev->asic_funcs->port_funcs;
+	is_ibdev = hl_cn_is_ibdev(hdev);
 
 	port_funcs->set_port_status(cn_port, up);
 
@@ -82,11 +84,16 @@ void hl_cn_phy_set_port_status(struct hl_cn_port *cn_port, bool up)
 				hdev->card_location, port, up ? "up" : "down");
 	}
 
-	/* User polls for EQ events.
+	/* IB flow. User polls for IB events.
+	 *  - internal ports: Enqueue link event in EQ dispatcher. IB event
+	 *                    would be dispatched in response.
+	 *  - external ports: Do not enqueue. HL IB driver dispatches
+	 *                    IB events from netdev notifier chain handler.
+	 * non-IB flow. User polls for EQ events.
 	 *  - internal ports: Enqueue link event in EQ dispatcher.
 	 *  - external ports: Enqueue link event in EQ dispatcher.
 	 */
-	if (!cn_port->eth_enable) {
+	if (!is_ibdev || !cn_port->eth_enable) {
 		if (hdev->has_eq) {
 			rc = hl_cn_eq_dispatcher_enqueue_bcast(cn_port, &cn_port->link_eqe);
 			if (rc)

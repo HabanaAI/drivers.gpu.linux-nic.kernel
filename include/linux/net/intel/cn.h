@@ -248,6 +248,157 @@ struct hl_en_aux_ops {
 	void *asic_ops;
 };
 
+/* InfiniBand */
+
+#define HL_IB_CNT_NAME_LEN	(ETH_GSTRING_LEN * 2)
+
+/**
+ * struct hl_ib_device_attr - IB device attributes.
+ * @fw_ver: firmware version.
+ * @max_mr_size: max size of a memory region.
+ * @page_size_cap: largest page size in MMU.
+ * @vendor_id: device vendor ID.
+ * @vendor_part_id: device vendor part ID.
+ * @hw_ver: device chip version.
+ * @cqe_size: Size of Completion Queue Entry.
+ * @min_cq_entries: Minimum completion queue entries needed.
+ * @max_qp: max QPs supported.
+ * @max_qp_wr: max QPs per work-request supported.
+ * @max_cqe: max completion-queue entries supported.
+ */
+struct hl_ib_device_attr {
+	u64 fw_ver;
+	u64 max_mr_size;
+	u64 page_size_cap;
+	u32 vendor_id;
+	u32 vendor_part_id;
+	u32 hw_ver;
+	u32 cqe_size;
+	u32 min_cq_entries;
+	s32 max_qp;
+	s32 max_qp_wr;
+	s32 max_cqe;
+};
+
+/**
+ * struct hl_ib_port_attr - IB port attributes.
+ * @speed: speed in Mb/s.
+ * @max_msg_sz: max message size
+ * @max_mtu: max mtu size
+ * @swqe_size: send WQE size.
+ * @rwqe_size: receive WQE size.
+ * @open: is open and fully initialized.
+ * @link_up: has PCS link.
+ * @num_lanes: number of lanes per port.
+ */
+struct hl_ib_port_attr {
+	u32 speed;
+	u32 max_msg_sz;
+	u32 max_mtu;
+	u32 swqe_size;
+	u32 rwqe_size;
+	u8 open;
+	u8 link_up;
+	u8 num_lanes;
+};
+
+/**
+ * struct hl_ib_port_cnts_data - IB port counters data.
+ * @names: Names of the counters.
+ * @num: Number of counters.
+ */
+struct hl_ib_port_cnts_data {
+	u8 *names;
+	u32 num;
+};
+
+/**
+ * struct hl_ib_dump_qp_attr - IB QP dump attributes.
+ * @port: Port ID the QP belongs to.
+ * @qpn: QP number.
+ * @req: Requester QP, otherwise responder.
+ * @full: Include full QP information.
+ * @force: Force reading a QP in invalid/error state.
+ */
+struct hl_ib_dump_qp_attr {
+	u32 port;
+	u32 qpn;
+	u8 req;
+	u8 full;
+	u8 force;
+};
+
+/**
+ * struct hl_ib_aux_data - habanalabs data for the IB driver.
+ * @pdev: pointer to PCI device, can be NULL in case of simulator device.
+ * @dev: related kernel basic device structure.
+ * @cnts_data: Ports counters data.
+ * @fw_ver: FW version.
+ * @ports_mask: mask of available ports.
+ * @ext_ports_mask: mask of external ports (subset of ports_mask).
+ * @dram_size: available DRAM size.
+ * @max_num_of_wqes: maximum number of WQ entries.
+ * @pending_reset_long_timeout: long timeout for pending hard reset to finish in seconds.
+ * @id: device ID.
+ * @max_num_of_ports: maximum number of ports supported by ASIC.
+ * @umr_support: device supports UMR.
+ */
+struct hl_ib_aux_data {
+	struct pci_dev *pdev;
+	struct device *dev;
+	struct hl_ib_port_cnts_data *cnts_data;
+	char *fw_ver;
+	u64 ports_mask;
+	u64 ext_ports_mask;
+	u64 dram_size;
+	u32 max_num_of_wqes;
+	u32 pending_reset_long_timeout;
+	u16 id;
+	u8 max_num_of_ports;
+	u8 umr_support;
+};
+
+/**
+ * struct hl_ib_aux_ops - pointer functions for cn <-> ib drivers communication.
+ * @device_operational: is device operational.
+ * @hw_access_lock: prevent HW access.
+ * @hw_access_unlock: allow HW access.
+ * @alloc_ucontext: allocate user context.
+ * @dealloc_ucontext: deallocate user context.
+ * @query_port: get port attributes.
+ * @cmd_ctrl: operate the device with proprietary opcodes.
+ * @query_device: get device attributes.
+ * @mmap: cn mmap handler.
+ * @set_ip_addr_encap: setup IP address encapsulation.
+ * @qp_syndrome_to_str: translates syndrome qp number to string.
+ * @verify_qp_id: verify if the specified QP id is valid.
+ * @get_cnts_values: get the values of the available counters.
+ * @dump_qp: dump QP context to the given buffer.
+ * @eqe_work_schd: schedule a user eq poll work on hlib side.
+ */
+struct hl_ib_aux_ops {
+	/* ib2cn */
+	bool (*device_operational)(struct hl_aux_dev *aux_dev);
+	void (*hw_access_lock)(struct hl_aux_dev *aux_dev);
+	void (*hw_access_unlock)(struct hl_aux_dev *aux_dev);
+	int (*alloc_ucontext)(struct hl_aux_dev *aux_dev, int user_fd, void **cn_ib_ctx);
+	void (*dealloc_ucontext)(struct hl_aux_dev *aux_dev, void *cn_ib_ctx);
+	void (*query_port)(struct hl_aux_dev *aux_dev, u32 port, struct hl_ib_port_attr *port_attr);
+	int (*cmd_ctrl)(struct hl_aux_dev *aux_dev, void *cn_ib_ctx, u32 op, void *input,
+			void *output);
+	void (*query_device)(struct hl_aux_dev *aux_dev, struct hl_ib_device_attr *device_attr);
+	int (*mmap)(struct hl_aux_dev *aux_dev, void *cn_ib_ctx, struct vm_area_struct *vma);
+	void (*set_ip_addr_encap)(struct hl_aux_dev *aux_dev, u32 ip_addr, u32 port);
+	char *(*qp_syndrome_to_str)(struct hl_aux_dev *aux_dev, u32 syndrome);
+	int (*verify_qp_id)(struct hl_aux_dev *aux_dev, u32 qp_id, u32 port);
+	void (*get_cnts_values)(struct hl_aux_dev *aux_dev, u32 port, u64 *data);
+	int (*dump_qp)(struct hl_aux_dev *aux_dev, struct hl_ib_dump_qp_attr *attr, char *buf,
+			size_t size);
+
+	/* cn2ib */
+	void (*eqe_work_schd)(struct hl_aux_dev *aux_dev, u32 port);
+};
+
 /* CN */
 
 /* interrupt type */

@@ -20,7 +20,7 @@
 #define HL_CNI_MEM_PREFETCH	0x40
 
 /**
- * structure hl_cni_mem_in - structure that handle input args for memory IOCTL
+ * structure hl_cni_mem_in - structure that handle input args for memory request.
  * @union arg: union of structures to be used based on the input operation
  * @op: specify the requested memory operation (one of the HL_MEM_OP_* definitions).
  * @flags: flags for the memory operation (one of the HL_MEM_* definitions).
@@ -37,8 +37,8 @@ struct hl_cni_mem_in {
 		 *             size will be taken.
 		 */
 		struct {
-			__u64 mem_size;
-			__u64 page_size;
+			u64 mem_size;
+			u64 page_size;
 		} alloc;
 
 		/**
@@ -46,7 +46,7 @@ struct hl_cni_mem_in {
 		 * @handle: handle returned from HL_MEM_OP_ALLOC
 		 */
 		struct {
-			__u64 handle;
+			u64 handle;
 		} free;
 
 		/**
@@ -54,14 +54,14 @@ struct hl_cni_mem_in {
 		 * @hint_addr: requested virtual address of mapped memory.
 		 *             the driver will try to map the requested region to this hint
 		 *             address, as long as the address is valid and not already mapped.
-		 *             the user should check the returned address of the IOCTL to make
-		 *             sure he got the hint address.
+		 *             the user should check the returned address to make sure he got the
+		 *             hint address.
 		 *             passing 0 here means that the driver will choose the address itself.
 		 * @handle: handle returned from HL_MEM_OP_ALLOC.
 		 */
 		struct {
-			__u64 hint_addr;
-			__u64 handle;
+			u64 hint_addr;
+			u64 handle;
 		} map_device;
 
 		/**
@@ -70,15 +70,15 @@ struct hl_cni_mem_in {
 		 * @hint_addr: requested virtual address of mapped memory.
 		 *             the driver will try to map the requested region to this hint
 		 *             address, as long as the address is valid and not already mapped.
-		 *             the user should check the returned address of the IOCTL to make
-		 *             sure he got the hint address.
+		 *             the user should check the returned addres to make sure he got the
+		 *             hint address.
 		 *             passing 0 here means that the driver will choose the address itself.
 		 * @size: size of allocated host memory.
 		 */
 		struct {
-			__u64 host_virt_addr;
-			__u64 hint_addr;
-			__u64 mem_size;
+			u64 host_virt_addr;
+			u64 hint_addr;
+			u64 mem_size;
 		} map_host;
 
 		/**
@@ -88,7 +88,7 @@ struct hl_cni_mem_in {
 		 *             only addresses from configuration space are allowed.
 		 */
 		struct {
-			__u64 block_addr;
+			u64 block_addr;
 		} map_block;
 
 		/**
@@ -97,7 +97,7 @@ struct hl_cni_mem_in {
 		 *                    from HL_MEM_OP_REG_DMABUF_FD
 		 */
 		struct {
-			__u64 device_virt_addr;
+			u64 device_virt_addr;
 		} unmap;
 
 		/**
@@ -115,9 +115,9 @@ struct hl_cni_mem_in {
 		 *          exported dma-buf object describes.
 		 */
 		struct {
-			__u64 addr;
-			__u64 mem_size;
-			__u64 offset;
+			u64 addr;
+			u64 mem_size;
+			u64 offset;
 		} export_dmabuf_fd;
 
 		/**
@@ -127,15 +127,15 @@ struct hl_cni_mem_in {
 		 * @length: total length of device memory area that the dmabuf object represents
 		 */
 		struct {
-			__u64 fd;
-			__u64 length;
+			u64 fd;
+			u64 length;
 		} reg_dmabuf_fd;
 	};
 
-	__u32 op;
-	__u32 flags;
-	__u32 ctx_id;
-	__u32 num_of_elements;
+	u32 op;
+	u32 flags;
+	u32 ctx_id;
+	u32 num_of_elements;
 };
 
 #define HL_CNI_STAT_STR_LEN	32
@@ -165,46 +165,44 @@ struct hl_cni_mem_in {
 struct hl_cni_cqe {
 	union {
 		struct {
-			__u32 wqe_index;
+			u32 wqe_index;
 		} requester;
 
 		struct {
-			__u32 msg_id;
+			u32 msg_id;
 		} responder;
 
 		struct {
-			__u32 syndrome;
+			u32 syndrome;
 		} qp_err;
 	};
 
-	__u32 port;
-	__u32 qp_number;
-	__u8 type;
-	__u8 is_err;
-	__u8 pad[2];
+	u32 port;
+	u32 qp_number;
+	u8 type;
+	u8 is_err;
 };
 
 /**
- * struct hl_cni_alloc_conn_in - NIC ioctl opcode HL_CNI_OP_ALLOC_CONN in param
+ * struct hl_cni_alloc_conn_in - NIC opcode HL_CNI_OP_ALLOC_CONN in param
  * @port: NIC port ID
  * @hint: this may be used as the connection-number hint for the driver as a recommendation of user
  */
 struct hl_cni_alloc_conn_in {
-	__u32 port;
-	__u32 hint;
+	u32 port;
+	u32 hint;
 };
 
 /**
- * struct hl_cni_alloc_conn_out - NIC ioctl opcode HL_CNI_OP_ALLOC_CONN out param
+ * struct hl_cni_alloc_conn_out - NIC opcode HL_CNI_OP_ALLOC_CONN out param
  * @conn_id: Connection ID
  */
 struct hl_cni_alloc_conn_out {
-	__u32 conn_id;
-	__u32 pad;
+	u32 conn_id;
 };
 
 /**
- * struct hl_cni_req_conn_ctx_in - NIC ioctl opcode HL_CNI_OP_SET_REQ_CONN_CTX in param
+ * struct hl_cni_req_conn_ctx_in - NIC opcode HL_CNI_OP_SET_REQ_CONN_CTX in param
  * @dst_ip_addr: Destination IP address in native endianness
  * @dst_conn_id: Destination connection ID
  * @last_index: Index of last entry [2..(2^22)-1]
@@ -228,47 +226,46 @@ struct hl_cni_alloc_conn_out {
  * @remote_key: Remote-key to be used to generate on outgoing packets
  */
 struct hl_cni_req_conn_ctx_in {
-	__u32 reserved;
-	__u32 dst_ip_addr;
-	__u32 dst_conn_id;
-	__u32 deprecated1;
-	__u32 last_index;
-	__u32 port;
-	__u32 conn_id;
-	__u8 dst_mac_addr[ETH_ALEN];
-	__u8 deprecated2;
-	__u8 priority;
-	__u8 deprecated3;
-	__u8 timer_granularity;
-	__u8 swq_granularity;
-	__u8 wq_type;
-	__u8 deprecated4;
-	__u8 cq_number;
-	__u8 wq_remote_log_size;
-	__u8 congestion_en;
-	__u32 congestion_wnd;
-	__u16 mtu;
-	__u8 encap_en;
-	__u8 encap_id;
-	__u32 wq_size;
-	__u8 loopback;
-	__u8 compression_en;
-	__u32 remote_key;
-	__u8 pad[7];
+	u32 reserved;
+	u32 dst_ip_addr;
+	u32 dst_conn_id;
+	u32 deprecated1;
+	u32 last_index;
+	u32 port;
+	u32 conn_id;
+	u8 dst_mac_addr[ETH_ALEN];
+	u8 deprecated2;
+	u8 priority;
+	u8 deprecated3;
+	u8 timer_granularity;
+	u8 swq_granularity;
+	u8 wq_type;
+	u8 deprecated4;
+	u8 cq_number;
+	u8 wq_remote_log_size;
+	u8 congestion_en;
+	u32 congestion_wnd;
+	u16 mtu;
+	u8 encap_en;
+	u8 encap_id;
+	u32 wq_size;
+	u8 loopback;
+	u8 compression_en;
+	u32 remote_key;
 };
 
 /**
- * struct hl_cni_req_conn_ctx_out - NIC ioctl opcode HL_CNI_OP_SET_REQ_CONN_CTX out param
+ * struct hl_cni_req_conn_ctx_out - NIC opcode HL_CNI_OP_SET_REQ_CONN_CTX out param
  * @swq_mem_handle: Handle for send WQ memory.
  * @rwq_mem_handle: Handle for receive WQ memory.
  */
 struct hl_cni_req_conn_ctx_out {
-	__u64 swq_mem_handle;
-	__u64 rwq_mem_handle;
+	u64 swq_mem_handle;
+	u64 rwq_mem_handle;
 };
 
 /**
- * struct hl_cni_res_conn_ctx_in - NIC ioctl opcode HL_CNI_OP_SET_RES_CONN_CTX in param
+ * struct hl_cni_res_conn_ctx_in - NIC opcode HL_CNI_OP_SET_RES_CONN_CTX in param
  * @dst_ip_addr: Destination IP address in native endianness
  * @dst_conn_id: Destination connection ID
  * @port: NIC port ID
@@ -286,36 +283,35 @@ struct hl_cni_req_conn_ctx_out {
  * @local_key: Local-key to be used to validate against incoming packets
  */
 struct hl_cni_res_conn_ctx_in {
-	__u32 reserved;
-	__u32 dst_ip_addr;
-	__u32 dst_conn_id;
-	__u32 port;
-	__u32 conn_id;
-	__u8 dst_mac_addr[ETH_ALEN];
-	__u8 priority;
-	__u8 deprecated1;
-	__u8 deprecated2;
-	__u8 wq_peer_granularity;
-	__u8 cq_number;
-	__u8 deprecated3;
-	__u32 conn_peer;
-	__u8 rdv;
-	__u8 loopback;
-	__u8 encap_en;
-	__u8 encap_id;
-	__u32 wq_peer_size;
-	__u32 local_key;
-	__u8 pad[7];
+	u32 reserved;
+	u32 dst_ip_addr;
+	u32 dst_conn_id;
+	u32 port;
+	u32 conn_id;
+	u8 dst_mac_addr[ETH_ALEN];
+	u8 priority;
+	u8 deprecated1;
+	u8 deprecated2;
+	u8 wq_peer_granularity;
+	u8 cq_number;
+	u8 deprecated3;
+	u32 conn_peer;
+	u8 rdv;
+	u8 loopback;
+	u8 encap_en;
+	u8 encap_id;
+	u32 wq_peer_size;
+	u32 local_key;
 };
 
 /**
- * struct hl_cni_destroy_conn_in - NIC ioctl opcode HL_CNI_OP_DESTROY_CONN in param
+ * struct hl_cni_destroy_conn_in - NIC opcode HL_CNI_OP_DESTROY_CONN in param
  * @port: NIC port ID
  * @conn_id: Connection ID
  */
 struct hl_cni_destroy_conn_in {
-	__u32 port;
-	__u32 conn_id;
+	u32 port;
+	u32 conn_id;
 };
 
 /**
@@ -351,7 +347,7 @@ enum hl_nic_swq_granularity {
 };
 
 /**
- * struct hl_cni_user_wq_arr_set_in - NIC ioctl opcode HL_CNI_OP_USER_WQ_SET in param
+ * struct hl_cni_user_wq_arr_set_in - NIC opcode HL_CNI_OP_USER_WQ_SET in param
  * @addr: Deprecated
  * @port: NIC port ID
  * @num_of_wqs: Number of user WQs
@@ -361,92 +357,87 @@ enum hl_nic_swq_granularity {
  * @swq_granularity: Specify the granularity of send WQ, 0: 32 bytes, 1: 64 bytes
  */
 struct hl_cni_user_wq_arr_set_in {
-	__u64 addr;
-	__u32 port;
-	__u32 num_of_wqs;
-	__u32 num_of_wq_entries;
-	__u32 type;
-	__u32 mem_id;
-	__u8  swq_granularity;
-	__u8  pad[3];
+	u64 addr;
+	u32 port;
+	u32 num_of_wqs;
+	u32 num_of_wq_entries;
+	u32 type;
+	u32 mem_id;
+	u8 swq_granularity;
 };
 
 /**
- * struct hl_cni_user_wq_arr_set_out - NIC ioctl opcode HL_CNI_OP_USER_WQ_SET out param
+ * struct hl_cni_user_wq_arr_set_out - NIC opcode HL_CNI_OP_USER_WQ_SET out param
  * @mem_handle: Handle of WQ array memory buffer
  */
 struct hl_cni_user_wq_arr_set_out {
-	__u64 mem_handle;
+	u64 mem_handle;
 };
 
 /**
- * struct hl_cni_user_wq_arr_unset_in - NIC ioctl opcode HL_CNI_OP_USER_WQ_UNSET in param
+ * struct hl_cni_user_wq_arr_unset_in - NIC opcode HL_CNI_OP_USER_WQ_UNSET in param
  * @port: NIC port ID
  * @type: Type of user WQ array
  */
 struct hl_cni_user_wq_arr_unset_in {
-	__u32 port;
-	__u32 type;
+	u32 port;
+	u32 type;
 };
 
 /**
- * struct hl_cni_alloc_user_cq_id_in - NIC ioctl opcode HL_CNI_OP_ALLOC_USER_CQ_ID in param.
+ * struct hl_cni_alloc_user_cq_id_in - NIC opcode HL_CNI_OP_ALLOC_USER_CQ_ID in param.
  * @port: NIC port ID.
  */
 struct hl_cni_alloc_user_cq_id_in {
-	__u32 port;
-	__u32 pad;
+	u32 port;
 };
 
 /**
- * struct hl_cni_alloc_user_cq_id_out - NIC ioctl opcode HL_CNI_OP_ALLOC_USER_CQ_ID out param.
+ * struct hl_cni_alloc_user_cq_id_out - NIC opcode HL_CNI_OP_ALLOC_USER_CQ_ID out param.
  * @id: CQ ID.
  */
 struct hl_cni_alloc_user_cq_id_out {
-	__u32 id;
-	__u32 pad;
+	u32 id;
 };
 
 /**
- * struct hl_cni_user_cq_id_set_in - NIC ioctl opcode HL_CNI_OP_USER_CQ_SET in param.
+ * struct hl_cni_user_cq_id_set_in - NIC opcode HL_CNI_OP_USER_CQ_SET in param.
  * @port: NIC port ID.
  * @num_of_cqes: Number of CQ entries in the buffer.
  * @id: CQ ID.
  */
 struct hl_cni_user_cq_id_set_in {
-	__u32 port;
-	__u32 num_of_cqes;
-	__u32 id;
-	__u32 pad;
+	u32 port;
+	u32 num_of_cqes;
+	u32 id;
 };
 
 /**
- * struct hl_cni_user_cq_id_set_out - NIC ioctl opcode HL_CNI_OP_USER_CQ_ID_SET out param.
+ * struct hl_cni_user_cq_id_set_out - NIC opcode HL_CNI_OP_USER_CQ_ID_SET out param.
  * @mem_handle: Handle of CQ memory buffer.
  * @pi_handle: Handle of CQ producer-inder memory buffer.
  * @regs_handle: Handle of CQ Registers base-address.
  * @regs_offset: CQ Registers sub-offset.
  */
 struct hl_cni_user_cq_id_set_out {
-	__u64 mem_handle;
-	__u64 pi_handle;
-	__u64 regs_handle;
-	__u32 regs_offset;
-	__u32 pad;
+	u64 mem_handle;
+	u64 pi_handle;
+	u64 regs_handle;
+	u32 regs_offset;
 };
 
 /**
- * struct hl_cni_user_cq_id_unset_in - NIC ioctl opcode HL_CNI_OP_USER_CQ_ID_UNSET in param.
+ * struct hl_cni_user_cq_id_unset_in - NIC opcode HL_CNI_OP_USER_CQ_ID_UNSET in param.
  * @port: NIC port ID.
  * @id: NIC CQ ID.
  */
 struct hl_cni_user_cq_id_unset_in {
-	__u32 port;
-	__u32 id;
+	u32 port;
+	u32 id;
 };
 
 /**
- * struct hl_cni_dump_qp_in - NIC ioctl opcode HL_CNI_OP_DUMP_QP in param.
+ * struct hl_cni_dump_qp_in - NIC opcode HL_CNI_OP_DUMP_QP in param.
  * @user_buf_address: Pre-allocated user buffer address to hold the dump output.
  * @user_buf_size: Size of the user buffer.
  * @port: NIC port ID.
@@ -454,16 +445,15 @@ struct hl_cni_user_cq_id_unset_in {
  * @req: is requester (otherwise responder).
  */
 struct hl_cni_dump_qp_in {
-	__u64 user_buf;
-	__u32 user_buf_size;
-	__u32 port;
-	__u32 qpn;
-	__u8 req;
-	__u8 pad[3];
+	u64 user_buf;
+	u32 user_buf_size;
+	u32 port;
+	u32 qpn;
+	u8 req;
 };
 
 /**
- * struct hl_cni_set_user_app_params_in - NIC ioctl opcode HL_CNI_OP_SET_USER_APP_PARAMS in param.
+ * struct hl_cni_set_user_app_params_in - NIC opcode HL_CNI_OP_SET_USER_APP_PARAMS in param.
  *                                        allow the user application to set general parameters
  *                                        regarding the RDMA nic operation. These parameters stay
  *                                        in effect until the application releases the device
@@ -477,26 +467,23 @@ struct hl_cni_dump_qp_in {
  *		configured in the SRAM/DDCM.
  */
 struct hl_cni_set_user_app_params_in {
-	__u32 port;
-	__u32 bp_offs[HL_CNI_USER_BP_OFFS_MAX];
-	__u8 advanced;
-	__u8 pad1;
-	__u8 fna_mask_size;
-	__u8 pad2;
-	__u32 fna_fifo_offs[HL_CNI_FNA_CMPL_ADDR_NUM];
+	u32 port;
+	u32 bp_offs[HL_CNI_USER_BP_OFFS_MAX];
+	u8 advanced;
+	u8 fna_mask_size;
+	u32 fna_fifo_offs[HL_CNI_FNA_CMPL_ADDR_NUM];
 };
 
 /**
- * struct hl_cni_get_user_app_params_in - NIC ioctl opcode HL_CNI_OP_GET_USER_APP_PARAMS in param
+ * struct hl_cni_get_user_app_params_in - NIC opcode HL_CNI_OP_GET_USER_APP_PARAMS in param
  * @port: NIC port ID
  */
 struct hl_cni_get_user_app_params_in {
-	__u32 port;
-	__u8 pad[4];
+	u32 port;
 };
 
 /**
- * struct hl_cni_get_user_app_params_out - NIC ioctl opcode HL_CNI_OP_GET_USER_APP_PARAMS out param
+ * struct hl_cni_get_user_app_params_out - NIC opcode HL_CNI_OP_GET_USER_APP_PARAMS out param
  * @max_num_of_qps: Number of QPs that are supported by the driver. User must allocate enough room
  *                  for his work-queues according to this number.
  * @num_allocated_qps: Number of QPs that were already allocated (in use)
@@ -512,37 +499,35 @@ struct hl_cni_get_user_app_params_in {
  * @nic_phys_port_idx: physical port index (AKA lane) of this specific port.
  */
 struct hl_cni_get_user_app_params_out {
-	__u32 max_num_of_qps;
-	__u32 num_allocated_qps;
-	__u32 max_allocated_qp_idx;
-	__u32 max_cq_size;
-	__u8 advanced;
-	__u8 max_num_of_cqs;
-	__u8 max_num_of_db_fifos;
-	__u8 max_num_of_encaps;
-	__u32 speed;
-	__u8 nic_macro_idx;
-	__u8 nic_phys_port_idx;
-	__u8 pad[6];
+	u32 max_num_of_qps;
+	u32 num_allocated_qps;
+	u32 max_allocated_qp_idx;
+	u32 max_cq_size;
+	u8 advanced;
+	u8 max_num_of_cqs;
+	u8 max_num_of_db_fifos;
+	u8 max_num_of_encaps;
+	u32 speed;
+	u8 nic_macro_idx;
+	u8 nic_phys_port_idx;
 };
 
 /**
- * struct hl_cni_alloc_user_db_fifo_in - NIC ioctl opcode HL_CNI_OP_ALLOC_USER_DB_FIFO in param
+ * struct hl_cni_alloc_user_db_fifo_in - NIC opcode HL_CNI_OP_ALLOC_USER_DB_FIFO in param
  * @port: NIC port ID
  * @id_hint: Hint to allocate a specific HW resource
  */
 struct hl_cni_alloc_user_db_fifo_in {
-	__u32 port;
-	__u32 id_hint;
+	u32 port;
+	u32 id_hint;
 };
 
 /**
- * struct hl_cni_alloc_user_db_fifo_out - NIC ioctl opcode HL_CNI_OP_ALLOC_USER_DB_FIFO out param
+ * struct hl_cni_alloc_user_db_fifo_out - NIC opcode HL_CNI_OP_ALLOC_USER_DB_FIFO out param
  * @id: DB-FIFO ID
  */
 struct hl_cni_alloc_user_db_fifo_out {
-	__u32 id;
-	__u32 pad;
+	u32 id;
 };
 
 /**
@@ -556,20 +541,19 @@ enum hl_nic_db_fifo_type {
 };
 
 /**
- * struct hl_cni_user_db_fifo_set_in - NIC ioctl opcode HL_CNI_OP_USER_DB_FIFO_SET in param
+ * struct hl_cni_user_db_fifo_set_in - NIC opcode HL_CNI_OP_USER_DB_FIFO_SET in param
  * @port: NIC port ID
  * @id: NIC DB-FIFO ID
  * @mode: represents desired mode of operation for provided FIFO, according to hl_nic_db_fifo_type
  */
 struct hl_cni_user_db_fifo_set_in {
-	__u32 port;
-	__u32 id;
-	__u8 mode;
-	__u8 pad[7];
+	u32 port;
+	u32 id;
+	u8 mode;
 };
 
 /**
- * struct hl_cni_user_db_fifo_set_out - NIC ioctl opcode HL_CNI_OP_USER_DB_FIFO_SET out param
+ * struct hl_cni_user_db_fifo_set_out - NIC opcode HL_CNI_OP_USER_DB_FIFO_SET out param
  * @ci_handle: Handle of DB-FIFO consumer-inder memory buffer
  * @regs_handle: Handle of DB-FIFO Registers base-address
  * @regs_offset: Offset to the DB-FIFO Registers
@@ -577,22 +561,21 @@ struct hl_cni_user_db_fifo_set_in {
  * @fifo_bp_thresh: fifo threshold that was set by the driver
  */
 struct hl_cni_user_db_fifo_set_out {
-	__u64 ci_handle;
-	__u64 regs_handle;
-	__u32 regs_offset;
-	__u32 pad;
-	__u32 fifo_size;
-	__u32 fifo_bp_thresh;
+	u64 ci_handle;
+	u64 regs_handle;
+	u32 regs_offset;
+	u32 fifo_size;
+	u32 fifo_bp_thresh;
 };
 
 /**
- * struct hl_cni_user_db_fifo_unset_in - NIC ioctl opcode HL_CNI_OP_USER_DB_FIFO_UNSET in param
+ * struct hl_cni_user_db_fifo_unset_in - NIC opcode HL_CNI_OP_USER_DB_FIFO_UNSET in param
  * @port: NIC port ID
  * @id: NIC DB-FIFO ID
  */
 struct hl_cni_user_db_fifo_unset_in {
-	__u32 port;
-	__u32 id;
+	u32 port;
+	u32 id;
 };
 
 /* The operation completed successfully and an event was read */
@@ -628,16 +611,15 @@ struct hl_cni_user_db_fifo_unset_in {
 #define HL_CNI_EQ_EVENT_TYPE_QP_ALIGN_COUNTERS 7
 
 /**
- * struct hl_cni_eq_poll_in - NIC ioctl opcode HL_CNI_OP_EQ_POLL in param
+ * struct hl_cni_eq_poll_in - NIC opcode HL_CNI_OP_EQ_POLL in param
  * @port: NIC port ID
  */
 struct hl_cni_eq_poll_in {
-	__u32 port;
-	__u32 pad;
+	u32 port;
 };
 
 /**
- * struct hl_cni_eq_poll_out - NIC ioctl opcode HL_CNI_OP_EQ_POLL out param
+ * struct hl_cni_eq_poll_out - NIC opcode HL_CNI_OP_EQ_POLL out param
  * @status: HL_CNI_EQ_POLL_STATUS_*
  * @idx: Connection/CQ/DB-fifo index, depends on event type
  * @ev_data: Event-specific data
@@ -646,13 +628,12 @@ struct hl_cni_eq_poll_in {
  * @is_req: For QP events marks if corresponding QP is requestor
  */
 struct hl_cni_eq_poll_out {
-	__u32 status;
-	__u32 idx;
-	__u32 ev_data;
-	__u8 ev_type;
-	__u8 rest_occurred;
-	__u8 is_req;
-	__u8 pad;
+	u32 status;
+	u32 idx;
+	u32 ev_data;
+	u8 ev_type;
+	u8 rest_occurred;
+	u8 is_req;
 };
 
 /**
@@ -668,25 +649,23 @@ enum hl_nic_encap_type {
 };
 
 /**
- * struct hl_cni_user_encap_alloc_in - NIC ioctl opcode HL_CNI_OP_USER_ENCAP_ALLOC in param
+ * struct hl_cni_user_encap_alloc_in - NIC opcode HL_CNI_OP_USER_ENCAP_ALLOC in param
  * @port: NIC port ID
  */
 struct hl_cni_user_encap_alloc_in {
-	__u32 port;
-	__u32 pad;
+	u32 port;
 };
 
 /**
- * struct hl_cni_user_encap_alloc_out - NIC ioctl opcode HL_CNI_OP_USER_ENCAP_ALLOC out param
+ * struct hl_cni_user_encap_alloc_out - NIC opcode HL_CNI_OP_USER_ENCAP_ALLOC out param
  * @id: Encapsulation ID
  */
 struct hl_cni_user_encap_alloc_out {
-	__u32 id;
-	__u32 pad;
+	u32 id;
 };
 
 /**
- * struct hl_cni_user_encap_set_in - NIC ioctl opcode HL_CNI_OP_USER_ENCAP_SET in param
+ * struct hl_cni_user_encap_set_in - NIC opcode HL_CNI_OP_USER_ENCAP_SET in param
  * @tnl_hdr_ptr: Pointer to the tunnel encapsulation header. i.e. specific tunnel header data to be
  *               used in the encapsulation by the HW.
  * @tnl_hdr_size: Tunnel encapsulation header size.
@@ -698,59 +677,56 @@ struct hl_cni_user_encap_alloc_out {
  * @encap_type: Encapsulation type. May be either no-encapsulation or encapsulation over L3 or L4.
  */
 struct hl_cni_user_encap_set_in {
-	__u64 tnl_hdr_ptr;
-	__u32 tnl_hdr_size;
-	__u32 port;
-	__u32 id;
-	__u32 ipv4_addr;
+	u64 tnl_hdr_ptr;
+	u32 tnl_hdr_size;
+	u32 port;
+	u32 id;
+	u32 ipv4_addr;
 	union {
-		__u16 udp_dst_port;
-		__u16 ip_proto;
+		u16 udp_dst_port;
+		u16 ip_proto;
 	};
-	__u8 encap_type;
-	__u8 pad[5];
+	u8 encap_type;
 };
 
 /**
- * struct hl_cni_user_encap_unset_in - NIC ioctl opcode HL_CNI_OP_USER_ENCAP_UNSET in param
+ * struct hl_cni_user_encap_unset_in - NIC opcode HL_CNI_OP_USER_ENCAP_UNSET in param
  * @port: NIC port ID
  * @id: Encapsulation ID
  */
 struct hl_cni_user_encap_unset_in {
-	__u32 port;
-	__u32 id;
+	u32 port;
+	u32 id;
 };
 
 /**
- * struct hl_cni_user_ccq_set_in - NIC ioctl opcode HL_CNI_OP_USER_CCQ_SET in param
+ * struct hl_cni_user_ccq_set_in - NIC opcode HL_CNI_OP_USER_CCQ_SET in param
  * @port: NIC port ID
  * @num_of_entries: Number of CCQ entries in the buffer
  */
 struct hl_cni_user_ccq_set_in {
-	__u32 port;
-	__u32 num_of_entries;
+	u32 port;
+	u32 num_of_entries;
 };
 
 /**
- * struct hl_cni_user_ccq_set_out - NIC ioctl opcode HL_CNI_OP_USER_CCQ_SET out param
+ * struct hl_cni_user_ccq_set_out - NIC opcode HL_CNI_OP_USER_CCQ_SET out param
  * @mem_handle: Handle of CCQ memory buffer
  * @pi_handle: Handle of CCQ producer-index memory buffer
  * @id: CQ ID.
  */
 struct hl_cni_user_ccq_set_out {
-	__u64 mem_handle;
-	__u64 pi_handle;
-	__u32 id;
-	__u32 pad;
+	u64 mem_handle;
+	u64 pi_handle;
+	u32 id;
 };
 
 /**
- * struct hl_cni_user_ccq_unset_in - NIC ioctl opcode HL_CNI_OP_USER_CCQ_UNSET in param
+ * struct hl_cni_user_ccq_unset_in - NIC opcode HL_CNI_OP_USER_CCQ_UNSET in param
  * @port: NIC port ID
  */
 struct hl_cni_user_ccq_unset_in {
-	__u32 port;
-	__u32 pad;
+	u32 port;
 };
 
 /* Opcode to allocate connection ID */
@@ -775,10 +751,10 @@ struct hl_cni_user_ccq_unset_in {
 #define HL_CNI_OP_USER_WQ_SET			9
 /* Opcode to unset a user WQ array */
 #define HL_CNI_OP_USER_WQ_UNSET			10
-/* Opcode to set user CQ (deprecated) */
-#define HL_CNI_OP_USER_CQ_SET			11
-/* Opcode to unset user CQ (deprecated) */
-#define HL_CNI_OP_USER_CQ_UNSET			12
+/* Reserved opcode */
+#define HL_CNI_OP_RESERVED11			11
+/* Reserved opcode */
+#define HL_CNI_OP_RESERVED12			12
 /* Reserved opcode */
 #define HL_CNI_OP_RESERVED13			13
 /* Opcode to allocate a CQ */

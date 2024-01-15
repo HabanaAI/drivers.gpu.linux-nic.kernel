@@ -666,8 +666,7 @@ void gaudi2_cn_eq_fini(struct hl_cn_device *hdev)
  * In gaudi2 each port has a single EQ. The HW writes all the related events
  * to this EQ. Since multiple applications can use the port at the same time we
  * need to have a way to dispatch the app-related events to the correct
- * application, these events will be read later on by the app using a dedicated
- * IOCTL added for this purpose.
+ * application, these events will be read later on by the IB API.
  */
 
 struct hl_cn_ev_dq *gaudi2_cn_eq_dispatcher_select_dq(struct hl_cn_port *cn_port,

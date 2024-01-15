@@ -118,7 +118,7 @@ struct hl_cn_cpucp_info {
 
 /**
  * struct hl_cn_aux_data - habanalabs data for the cn driver.
- * @pdev: pointer to PCI device, can be NULL in case of simulator device.
+ * @pdev: pointer to PCI device.
  * @dev: related kernel basic device structure.
  * @asic_specific: ASIC specific data.
  * @fw_ver: FW version.

@@ -566,56 +566,17 @@ static void set_default_mac_lane_remap(struct hl_cn_device *hdev)
 
 static s32 get_pam4_tap_pre2(struct hl_cn_device *hdev, u32 card_location, u32 abs_lane_idx)
 {
-	enum gaudi2_setup_type setup_type = GAUDI2_SETUP_TYPE_HLS2;
-
-	switch (setup_type) {
-	case GAUDI2_SETUP_TYPE_HLS2:
-		return 2;
-	case GAUDI2_SETUP_TYPE_HL225_S_EXT_LB:
-	case GAUDI2_SETUP_TYPE_HL325_S_EXT_LB:
-	case GAUDI2_SETUP_TYPE_HLS3:
-		return 2;
-	default:
-		dev_err(hdev->dev, "Wrong setup type %d\n", setup_type);
-	}
-
 	return 2;
 }
 
 static s32 get_pam4_tap_pre1(struct hl_cn_device *hdev, u32 card_location, u32 abs_lane_idx)
 {
-	enum gaudi2_setup_type setup_type = GAUDI2_SETUP_TYPE_HLS2;
-
-	switch (setup_type) {
-	case GAUDI2_SETUP_TYPE_HLS2:
-		return -10;
-	case GAUDI2_SETUP_TYPE_HL225_S_EXT_LB:
-	case GAUDI2_SETUP_TYPE_HL325_S_EXT_LB:
-	case GAUDI2_SETUP_TYPE_HLS3:
-		return -12;
-	default:
-		dev_err(hdev->dev, "Wrong setup type %d\n", setup_type);
-	}
-
-	return -12;
+	return -10;
 }
 
 static s32 get_pam4_tap_main(struct hl_cn_device *hdev, u32 card_location, u32 abs_lane_idx)
 {
-	enum gaudi2_setup_type setup_type = GAUDI2_SETUP_TYPE_HLS2;
-
-	switch (setup_type) {
-	case GAUDI2_SETUP_TYPE_HLS2:
-		return 23;
-	case GAUDI2_SETUP_TYPE_HL225_S_EXT_LB:
-	case GAUDI2_SETUP_TYPE_HL325_S_EXT_LB:
-	case GAUDI2_SETUP_TYPE_HLS3:
-		return 22;
-	default:
-		dev_err(hdev->dev, "Wrong setup type %d\n", setup_type);
-	}
-
-	return 22;
+	return 23;
 }
 
 static s32 get_pam4_tap_post1(struct hl_cn_device *hdev, u32 card_location, u32 abs_lane_idx)
