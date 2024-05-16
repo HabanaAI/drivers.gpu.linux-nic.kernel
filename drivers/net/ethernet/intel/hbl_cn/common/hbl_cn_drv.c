@@ -207,14 +207,31 @@ static struct auxiliary_driver hbl_cn_driver = {
 
 static int __init hbl_cn_init(void)
 {
+	int rc;
+
 	pr_info("loading driver\n");
 
-	return auxiliary_driver_register(&hbl_cn_driver);
+	hbl_cn_debugfs_init();
+
+	rc = auxiliary_driver_register(&hbl_cn_driver);
+	if (rc) {
+		pr_err("Failed to register auxiliary driver\n");
+		goto remove_debugfs;
+	}
+
+	return 0;
+
+remove_debugfs:
+	hbl_cn_debugfs_fini();
+
+	return rc;
 }
 
 static void __exit hbl_cn_exit(void)
 {
 	auxiliary_driver_unregister(&hbl_cn_driver);
+
+	hbl_cn_debugfs_fini();
 
 	pr_info("driver removed\n");
 }

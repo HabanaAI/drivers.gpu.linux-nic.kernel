@@ -142,6 +142,34 @@
 #define hbl_cn_dma_pool_free(hdev, vaddr, dma_addr) \
 	__hbl_cn_dma_pool_free(hdev, vaddr, dma_addr, __func__)
 
+/* CN debugfs files enum */
+enum hbl_cn_debugfs_files_idx {
+	NIC_MAC_LOOPBACK = 0,
+	NIC_PAM4_TX_TAPS,
+	NIC_NRZ_TX_TAPS,
+	NIC_POLARITY,
+	NIC_QP,
+	NIC_WQE,
+	NIC_RESET_CNT,
+	NIC_MAC_LANE_REMAP,
+	NIC_RAND_STATUS,
+	NIC_MMU_BYPASS,
+	NIC_ETH_LOOPBACK,
+	NIC_PHY_REGS_PRINT,
+	NIC_SHOW_INTERNAL_PORTS_STATUS,
+	NIC_PRINT_FEC_STATS,
+	NIC_DISABLE_DECAP,
+	NIC_PHY_SET_NRZ,
+	NIC_PHY_DUMP_SERDES_PARAMS,
+	NIC_INJECT_RX_ERR,
+	NIC_PHY_CALC_BER,
+	NIC_PHY_CALC_BER_WAIT_SEC,
+	NIC_OVERRIDE_PORT_STATUS,
+	NIC_WQE_INDEX_CHECKER,
+	NIC_ACCUMULATE_FEC_DURATION,
+	NIC_PHY_FORCE_FIRST_TX_TAPS_CFG,
+};
+
 extern struct hbl_cn_stat hbl_cn_mac_fec_stats[];
 extern struct hbl_cn_stat hbl_cn_mac_stats_rx[];
 extern struct hbl_cn_stat hbl_cn_mac_stats_tx[];
@@ -1312,6 +1340,7 @@ struct hbl_cn_properties {
  * struct hbl_cn_device - habanalabs CN device structure.
  * @pdev: pointer to PCI device.
  * @dev: related kernel basic device structure.
+ * @cn_dentry: CN debugfs root dentry.
  * @cpucp_info: FW info.
  * @asic_funcs: ASIC specific functions that can be called from common code.
  * @phy_tx_taps: array that holds all PAM4 Tx taps of all lanes.
@@ -1341,6 +1370,7 @@ struct hbl_cn_properties {
  * @mac_loopback: enable MAC loopback on specific ports.
  * @dram_size: available DRAM size.
  * @mmap_type_flag: flag to indicate NIC MMAP type.
+ * @debugfs_supp_mask: mask of supported debugfs files.
  * @pol_tx_mask: bitmap of tx polarity for all lanes.
  * @pol_rx_mask: bitmap of rx polarity for all lanes.
  * @device_timeout: device access timeout in usec.
@@ -1411,6 +1441,7 @@ struct hbl_cn_properties {
 struct hbl_cn_device {
 	struct pci_dev *pdev;
 	struct device *dev;
+	struct dentry *cn_dentry;
 	struct hbl_cn_cpucp_info *cpucp_info;
 	struct hbl_cn_asic_funcs *asic_funcs;
 	struct hbl_cn_tx_taps *phy_tx_taps;
@@ -1441,6 +1472,7 @@ struct hbl_cn_device {
 	u64 mac_loopback;
 	u64 dram_size;
 	u64 mmap_type_flag;
+	u64 debugfs_supp_mask;
 	u64 pol_tx_mask;
 	u64 pol_rx_mask;
 	u32 device_timeout;
@@ -1534,6 +1566,8 @@ void hbl_cn_phy_set_port_status(struct hbl_cn_port *cn_port, bool up);
 int hbl_cn_read_spmu_counters(struct hbl_cn_port *cn_port, u64 out_data[], u32 *num_out_data);
 int hbl_cn_qp_modify(struct hbl_cn_port *cn_port, struct hbl_cn_qp *qp,
 		     enum hbl_cn_qp_state new_state, void *params);
+void hbl_cn_debugfs_dev_init(struct hbl_cn_device *hdev);
+void hbl_cn_debugfs_dev_fini(struct hbl_cn_device *hdev);
 u32 hbl_cn_get_max_qp_id(struct hbl_cn_port *cn_port);
 bool hbl_cn_is_port_open(struct hbl_cn_port *cn_port);
 u32 hbl_cn_get_pflags(struct hbl_cn_port *cn_port);
@@ -1613,6 +1647,9 @@ void hbl_cn_ctx_resources_destroy(struct hbl_cn_device *hdev, struct hbl_cn_ctx 
 int __hbl_cn_ports_reopen(struct hbl_cn_device *hdev);
 void __hbl_cn_hard_reset_prepare(struct hbl_cn_device *hdev, bool fw_reset, bool in_teardown);
 void __hbl_cn_stop(struct hbl_cn_device *hdev);
+
+void __init hbl_cn_debugfs_init(void);
+void hbl_cn_debugfs_fini(void);
 
 /* DMA memory allocations */
 void *__hbl_cn_dma_alloc_coherent(struct hbl_cn_device *hdev, size_t size, dma_addr_t *dma_handle,
