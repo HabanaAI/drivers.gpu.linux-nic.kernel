@@ -9624,6 +9624,7 @@ W:	https://www.habana.ai
 F:	Documentation/networking/device_drivers/ethernet/intel/hbl.rst
 F:	drivers/net/ethernet/intel/hbl_en/
 F:	include/linux/net/intel/cn*
+F:	include/linux/net/intel/gaudi2*
 
 HACKRF MEDIA DRIVER
 L:	linux-media@vger.kernel.org
