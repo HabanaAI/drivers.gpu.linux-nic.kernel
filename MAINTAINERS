@@ -9609,6 +9609,7 @@ L:	netdev@vger.kernel.org
 L:	linux-rdma@vger.kernel.org
 S:	Supported
 W:	https://www.habana.ai
+F:	Documentation/ABI/testing/debugfs-driver-habanalabs_cn
 F:	Documentation/networking/device_drivers/ethernet/intel/hbl.rst
 F:	drivers/net/ethernet/intel/hbl_cn/
 F:	include/linux/habanalabs/

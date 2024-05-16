@@ -1852,6 +1852,8 @@ int hbl_cn_dev_init(struct hbl_cn_device *hdev)
 
 	hbl_cn_late_init(hdev);
 
+	hbl_cn_debugfs_dev_init(hdev);
+
 	hdev->is_initialized = true;
 
 	return 0;
@@ -1887,6 +1889,8 @@ void hbl_cn_dev_fini(struct hbl_cn_device *hdev)
 		hbl_cn_hard_reset_prepare(hdev->cn_aux_dev, false, true);
 		hbl_cn_stop(hdev->cn_aux_dev);
 	}
+
+	hbl_cn_debugfs_dev_fini(hdev);
 
 	hbl_cn_late_fini(hdev);
 
