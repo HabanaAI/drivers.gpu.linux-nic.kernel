@@ -203,4 +203,6 @@ int hbl_en_handle_rx(struct hbl_en_port *port, int budget);
 dma_addr_t hbl_en_dma_map(struct hbl_en_device *hdev, void *addr, int len);
 void hbl_en_dma_unmap(struct hbl_en_device *hdev, dma_addr_t dma_addr, int len);
 
+void gaudi2_en_set_asic_funcs(struct hbl_en_device *hdev);
+
 #endif /* HABANALABS_EN_H_ */

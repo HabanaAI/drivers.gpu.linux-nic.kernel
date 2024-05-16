@@ -7,3 +7,6 @@ obj-$(CONFIG_HABANA_EN) := habanalabs_en.o
 
 include $(src)/common/Makefile
 habanalabs_en-y += $(HBL_EN_COMMON_FILES)
+
+include $(src)/gaudi2/Makefile
+habanalabs_en-y += $(HBL_EN_GAUDI2_FILES)
