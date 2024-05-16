@@ -12,6 +12,8 @@
 #include <linux/pci.h>
 #include <linux/slab.h>
 
+#include <trace/events/habanalabs_cn.h>
+
 #define NIC_MIN_WQS_PER_PORT		2
 
 #define NIC_SEQ_RESETS_TIMEOUT_MS	15000 /* 15 seconds */
@@ -5892,8 +5894,15 @@ void *__hbl_cn_dma_alloc_coherent(struct hbl_cn_device *hdev, size_t size, dma_a
 				  gfp_t flag, const char *caller)
 {
 	const struct hbl_cn_asic_funcs *asic_funcs = hdev->asic_funcs;
+	void *ptr;
 
-	return asic_funcs->dma_alloc_coherent(hdev, size, dma_handle, flag);
+	ptr = asic_funcs->dma_alloc_coherent(hdev, size, dma_handle, flag);
+
+	if (trace_habanalabs_cn_dma_alloc_coherent_enabled())
+		trace_habanalabs_cn_dma_alloc_coherent(hdev->dev, (u64)(uintptr_t)ptr, *dma_handle,
+						       size, caller);
+
+	return ptr;
 }
 
 void __hbl_cn_dma_free_coherent(struct hbl_cn_device *hdev, size_t size, void *cpu_addr,
@@ -5902,14 +5911,25 @@ void __hbl_cn_dma_free_coherent(struct hbl_cn_device *hdev, size_t size, void *c
 	const struct hbl_cn_asic_funcs *asic_funcs = hdev->asic_funcs;
 
 	asic_funcs->dma_free_coherent(hdev, size, cpu_addr, dma_addr);
+
+	if (trace_habanalabs_cn_dma_free_coherent_enabled())
+		trace_habanalabs_cn_dma_free_coherent(hdev->dev, (u64)(uintptr_t)cpu_addr, dma_addr,
+						      size, caller);
 }
 
 void *__hbl_cn_dma_pool_zalloc(struct hbl_cn_device *hdev, size_t size, gfp_t mem_flags,
 			       dma_addr_t *dma_handle, const char *caller)
 {
 	const struct hbl_cn_asic_funcs *asic_funcs = hdev->asic_funcs;
+	void *ptr;
 
-	return asic_funcs->dma_pool_zalloc(hdev, size, mem_flags, dma_handle);
+	ptr = asic_funcs->dma_pool_zalloc(hdev, size, mem_flags, dma_handle);
+
+	if (trace_habanalabs_cn_dma_pool_zalloc_enabled())
+		trace_habanalabs_cn_dma_pool_zalloc(hdev->dev, (u64)(uintptr_t)ptr, *dma_handle,
+						    size, caller);
+
+	return ptr;
 }
 
 void __hbl_cn_dma_pool_free(struct hbl_cn_device *hdev, void *vaddr, dma_addr_t dma_addr,
@@ -5918,6 +5938,10 @@ void __hbl_cn_dma_pool_free(struct hbl_cn_device *hdev, void *vaddr, dma_addr_t 
 	const struct hbl_cn_asic_funcs *asic_funcs = hdev->asic_funcs;
 
 	asic_funcs->dma_pool_free(hdev, vaddr, dma_addr);
+
+	if (trace_habanalabs_cn_dma_pool_free_enabled())
+		trace_habanalabs_cn_dma_pool_free(hdev->dev, (u64)(uintptr_t)vaddr, dma_addr, 0,
+						  caller);
 }
 
 int hbl_cn_get_reg_pcie_addr(struct hbl_cn_device *hdev, u8 bar_id, u32 reg, u64 *pci_addr)

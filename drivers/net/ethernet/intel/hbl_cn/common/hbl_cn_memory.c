@@ -6,6 +6,7 @@
 
 #include <linux/vmalloc.h>
 #include "hbl_cn.h"
+#include <trace/events/habanalabs_cn.h>
 
 static int hbl_cn_map_vmalloc_range(struct hbl_cn_ctx *ctx, u64 vmalloc_va, u64 device_va,
 				    u64 size)
@@ -201,11 +202,15 @@ free_buf:
 
 static int cn_mem_alloc(struct hbl_cn_ctx *ctx, struct hbl_cn_mem_data *mem_data)
 {
+	struct hbl_cn_device *hdev = ctx->hdev;
 	struct hbl_cn_mem_buf *buf;
 
 	buf = cn_mem_buf_alloc(ctx, GFP_KERNEL, mem_data);
 	if (!buf)
 		return -ENOMEM;
+
+	trace_habanalabs_cn_mem_alloc(hdev->dev, buf->mem_id, buf->handle, (u64)buf->kernel_address,
+				      buf->bus_address, buf->device_va, buf->mappable_size);
 
 	mem_data->handle = buf->handle;
 
@@ -242,6 +247,10 @@ int hbl_cn_mem_alloc(struct hbl_cn_ctx *ctx, struct hbl_cn_mem_data *mem_data)
 
 static void cn_mem_buf_destroy(struct hbl_cn_mem_buf *buf)
 {
+	trace_habanalabs_cn_mem_destroy(buf->ctx->hdev->dev, buf->mem_id, buf->handle,
+					(u64)buf->kernel_address, buf->bus_address, buf->device_va,
+					buf->mappable_size);
+
 	if (buf->device_va)
 		hbl_cn_unmap_vmalloc_range(buf->ctx, buf->device_va, buf->mappable_size);
 
