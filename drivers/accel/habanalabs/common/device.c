@@ -963,6 +963,7 @@ static int device_early_init(struct hl_device *hdev)
 	INIT_LIST_HEAD(&hdev->fpriv_ctrl_list);
 	mutex_init(&hdev->fpriv_list_lock);
 	mutex_init(&hdev->fpriv_ctrl_list_lock);
+	mutex_init(&hdev->cn.hw_access_lock);
 	mutex_init(&hdev->clk_throttling.lock);
 
 	return 0;
@@ -1007,6 +1008,7 @@ static void device_early_fini(struct hl_device *hdev)
 	mutex_destroy(&hdev->debug_lock);
 	mutex_destroy(&hdev->send_cpu_message_lock);
 
+	mutex_destroy(&hdev->cn.hw_access_lock);
 	mutex_destroy(&hdev->fpriv_list_lock);
 	mutex_destroy(&hdev->fpriv_ctrl_list_lock);
 
@@ -1251,6 +1253,10 @@ static void take_release_locks(struct hl_device *hdev)
 	mutex_unlock(&hdev->fpriv_list_lock);
 	mutex_lock(&hdev->fpriv_ctrl_list_lock);
 	mutex_unlock(&hdev->fpriv_ctrl_list_lock);
+
+	/* Flush CN flows */
+	mutex_lock(&hdev->cn.hw_access_lock);
+	mutex_unlock(&hdev->cn.hw_access_lock);
 }
 
 static void hl_abort_waiting_for_completions(struct hl_device *hdev)
@@ -1868,6 +1874,12 @@ kill_processes:
 			goto out_err;
 		}
 
+		rc = hdev->asic_funcs->cn_init(hdev);
+		if (rc) {
+			dev_err(hdev->dev, "Failed to init CN driver\n");
+			goto out_err;
+		}
+
 		if (!hdev->asic_prop.fw_security_enabled)
 			hl_fw_set_max_power(hdev);
 	} else {
@@ -2330,6 +2342,14 @@ int hl_device_init(struct hl_device *hdev)
 		goto out_disabled;
 	}
 
+	/* must be called after sysfs init for the auxiliary bus */
+	rc = hdev->asic_funcs->cn_init(hdev);
+	if (rc) {
+		dev_err(hdev->dev, "Failed to init CN driver\n");
+		rc = 0;
+		goto out_disabled;
+	}
+
 	/* Need to call this again because the max power might change,
 	 * depending on card type for certain ASICs
 	 */
@@ -2516,6 +2536,9 @@ void hl_device_fini(struct hl_device *hdev)
 	}
 
 	hl_cb_pool_fini(hdev);
+
+	/* CN uses the kernel context for MMU mappings, therefore must be cleaned before it */
+	hdev->asic_funcs->cn_fini(hdev);
 
 	/* Reset the H/W. It will be in idle state after this returns */
 	rc = hdev->asic_funcs->hw_fini(hdev, true, false);

@@ -8,6 +8,9 @@ obj-$(CONFIG_DRM_ACCEL_HABANALABS) := habanalabs.o
 include $(src)/common/Makefile
 habanalabs-y += $(HL_COMMON_FILES)
 
+include $(src)/cn/Makefile
+habanalabs-y += $(HL_CN_FILES)
+
 include $(src)/gaudi2/Makefile
 habanalabs-y += $(HL_GAUDI2_FILES)
 
