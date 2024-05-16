@@ -12,6 +12,9 @@
 #include <linux/auxiliary_bus.h>
 #include <linux/sched/clock.h>
 
+#define CREATE_TRACE_POINTS
+#include <trace/events/habanalabs_cn.h>
+
 #define HBL_DRIVER_AUTHOR	"HabanaLabs Kernel Driver Team"
 
 #define HBL_DRIVER_DESC		"HabanaLabs AI accelerators Core Network driver"
