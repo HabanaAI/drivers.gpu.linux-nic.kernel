@@ -417,4 +417,22 @@ config HABANA_CN
 	  To compile this driver as a module, choose M here. The module
 	  will be called habanalabs_cn.
 
+config HABANA_EN
+	tristate "HabanaLabs (an Intel Company) Ethernet driver"
+	depends on NETDEVICES && ETHERNET && INET
+	select HABANA_CN
+	help
+	  This driver enables Ethernet functionality for the network interfaces
+	  that are part of the GAUDI ASIC family of AI Accelerators.
+	  For more information on how to identify your adapter, go to the
+	  Adapter & Driver ID Guide that can be located at:
+
+	  <http://support.intel.com>
+
+	  More specific information on configuring the driver is in
+	  <file:Documentation/networking/device_drivers/ethernet/intel/hbl.rst>.
+
+	  To compile this driver as a module, choose M here. The module
+	  will be called habanalabs_en.
+
 endif # NET_VENDOR_INTEL

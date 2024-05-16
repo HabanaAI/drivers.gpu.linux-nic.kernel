@@ -20,3 +20,4 @@ obj-$(CONFIG_FM10K) += fm10k/
 obj-$(CONFIG_ICE) += ice/
 obj-$(CONFIG_IDPF) += idpf/
 obj-$(CONFIG_HABANA_CN) += hbl_cn/
+obj-$(CONFIG_HABANA_EN) += hbl_en/
