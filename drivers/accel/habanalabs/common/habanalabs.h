@@ -32,6 +32,7 @@
 #include <drm/drm_device.h>
 #include <drm/drm_file.h>
 
+#include "../cn/cn.h"
 #include "security.h"
 
 #define HL_NAME				"habanalabs"
@@ -543,10 +544,24 @@ struct hl_hints_range {
 };
 
 /**
+ * struct hl_cn_properties - ASIC specific properties.
+ * @cpucp_info: received various information from CPU-CP regarding the NIC
+ *              H/W, e.g. MAC addresses.
+ * @status_packet_size: size of the status packet we are going to send to F/W.
+ * @max_num_of_ports: maximum number of ports supported by ASIC.
+ */
+struct hl_cn_properties {
+	struct hbl_cn_cpucp_info cpucp_info;
+	u32 status_packet_size;
+	u8 max_num_of_ports;
+};
+
+/**
  * struct asic_fixed_properties - ASIC specific immutable properties.
  * @hw_queues_props: H/W queues properties.
  * @special_blocks: points to an array containing special blocks info.
  * @skip_special_blocks_cfg: special blocks skip configs.
+ * @cn_props: CN driver properties.
  * @cpucp_info: received various information from CPU-CP regarding the H/W, e.g.
  *		available sensors.
  * @uboot_ver: F/W U-boot version.
@@ -590,6 +605,9 @@ struct hl_hints_range {
  * @max_freq_value: current max clk frequency.
  * @engine_core_interrupt_reg_addr: interrupt register address for engine core to use
  *                                  in order to raise events toward FW.
+ * @nic_drv_addr: base address for NIC driver on DRAM.
+ * @nic_drv_size: driver size reserved for NIC driver on DRAM.
+ * @macro_cfg_size: the size of the macro configuration space.
  * @clk_pll_index: clock PLL index that specify which PLL determines the clock
  *                 we display to the user
  * @mmu_pgt_size: MMU page tables total size.
@@ -666,6 +684,7 @@ struct hl_hints_range {
  * @cache_line_size: device cache line size.
  * @server_type: Server type that the ASIC is currently installed in.
  *               The value is according to enum hl_server_type in uapi file.
+ * @clk: clock frequency in MHz.
  * @completion_queues_count: number of completion queues.
  * @completion_mode: 0 - job based completion, 1 - cs based completion
  * @mme_master_slave_mode: 0 - Each MME works independently, 1 - MME works
@@ -705,6 +724,7 @@ struct asic_fixed_properties {
 	struct hw_queue_properties	*hw_queues_props;
 	struct hl_special_block_info	*special_blocks;
 	struct hl_skip_blocks_cfg	skip_special_blocks_cfg;
+	struct hl_cn_properties		cn_props;
 	struct cpucp_info		cpucp_info;
 	char				uboot_ver[VERSION_MAX_LEN];
 	char				preboot_ver[VERSION_MAX_LEN];
@@ -742,6 +762,9 @@ struct asic_fixed_properties {
 	u64				host_end_address;
 	u64				max_freq_value;
 	u64				engine_core_interrupt_reg_addr;
+	u64				nic_drv_addr;
+	u64				nic_drv_size;
+	u32				macro_cfg_size;
 	u32				clk_pll_index;
 	u32				mmu_pgt_size;
 	u32				mmu_pte_size;
@@ -796,6 +819,7 @@ struct asic_fixed_properties {
 	u16				eq_interrupt_id;
 	u16				cache_line_size;
 	u16				server_type;
+	u16				clk;
 	u8				completion_queues_count;
 	u8				completion_mode;
 	u8				mme_master_slave_mode;
@@ -1562,10 +1586,14 @@ struct engines_data {
  *                    then the timeout is the default timeout for the specific
  *                    ASIC
  * @get_hw_state: retrieve the H/W state
+ * @cn_init: init the CN H/W and I/F. This should be called in the final stage of the init flow, as
+ *            we must not have anything that might fail during its initialization after the CN init.
+ * @cn_fini: perform CN cleanup.
  * @pci_bars_map: Map PCI BARs.
  * @init_iatu: Initialize the iATU unit inside the PCI controller.
  * @rreg: Read a register. Needed for simulator support.
  * @wreg: Write a register. Needed for simulator support.
+ * @get_reg_pcie_addr: Retrieve pci address.
  * @halt_coresight: stop the ETF and ETR traces.
  * @ctx_init: context dependent initialization.
  * @ctx_fini: context dependent cleanup.
@@ -1617,6 +1645,7 @@ struct engines_data {
  * @send_device_activity: indication to FW about device availability
  * @set_dram_properties: set DRAM related properties.
  * @set_binning_masks: set binning/enable masks for all relevant components.
+ * @cn_funcs: ASIC specific CN functions.
  */
 struct hl_asic_funcs {
 	int (*early_init)(struct hl_device *hdev);
@@ -1692,10 +1721,13 @@ struct hl_asic_funcs {
 	int (*get_monitor_dump)(struct hl_device *hdev, void *data);
 	int (*send_cpu_message)(struct hl_device *hdev, u32 *msg,
 				u16 len, u32 timeout, u64 *result);
+	int (*cn_init)(struct hl_device *hdev);
+	void (*cn_fini)(struct hl_device *hdev);
 	int (*pci_bars_map)(struct hl_device *hdev);
 	int (*init_iatu)(struct hl_device *hdev);
 	u32 (*rreg)(struct hl_device *hdev, u32 reg);
 	void (*wreg)(struct hl_device *hdev, u32 reg, u32 val);
+	int (*get_reg_pcie_addr)(struct hl_device *hdev, u32 reg, u64 *pci_addr);
 	void (*halt_coresight)(struct hl_device *hdev, struct hl_ctx *ctx);
 	int (*ctx_init)(struct hl_ctx *ctx);
 	void (*ctx_fini)(struct hl_ctx *ctx);
@@ -1751,6 +1783,7 @@ struct hl_asic_funcs {
 	int (*send_device_activity)(struct hl_device *hdev, bool open);
 	int (*set_dram_properties)(struct hl_device *hdev);
 	int (*set_binning_masks)(struct hl_device *hdev);
+	struct hl_cn_funcs *cn_funcs;
 };
 
 
@@ -3234,6 +3267,7 @@ struct hl_reset_info {
  * @asic_prop: ASIC specific immutable properties.
  * @asic_funcs: ASIC specific functions.
  * @asic_specific: ASIC specific information to use only from ASIC files.
+ * @cn: CN common structure.
  * @vm: virtual memory manager for MMU.
  * @hwmon_dev: H/W monitor device.
  * @hl_chip_info: ASIC's sensors information.
@@ -3353,7 +3387,6 @@ struct hl_reset_info {
  * @supports_ctx_switch: true if a ctx switch is required upon first submission.
  * @support_preboot_binning: true if we support read binning info from preboot.
  * @eq_heartbeat_received: indication that eq heartbeat event has received from FW.
- * @nic_ports_mask: Controls which NIC ports are enabled. Used only for testing.
  * @fw_components: Controls which f/w components to load to the device. There are multiple f/w
  *                 stages and sometimes we want to stop at a certain stage. Used only for testing.
  * @mmu_disable: Disable the device MMU(s). Used only for testing.
@@ -3413,6 +3446,7 @@ struct hl_device {
 	struct asic_fixed_properties	asic_prop;
 	const struct hl_asic_funcs	*asic_funcs;
 	void				*asic_specific;
+	struct hl_cn			cn;
 	struct hl_vm			vm;
 	struct device			*hwmon_dev;
 	struct hwmon_chip_info		*hl_chip_info;
@@ -3518,7 +3552,6 @@ struct hl_device {
 	u8				eq_heartbeat_received;
 
 	/* Parameters for bring-up to be upstreamed */
-	u64				nic_ports_mask;
 	u64				fw_components;
 	u8				mmu_disable;
 	u8				cpu_queues_enable;
@@ -3843,6 +3876,8 @@ void hl_userptr_delete_list(struct hl_device *hdev,
 bool hl_userptr_is_pinned(struct hl_device *hdev, u64 addr, u32 size,
 				struct list_head *userptr_list,
 				struct hl_userptr **userptr);
+int hl_map_vmalloc_range(struct hl_ctx *ctx, u64 vmalloc_va, u64 device_va, u64 size);
+int hl_unmap_vmalloc_range(struct hl_ctx *ctx, u64 device_va);
 
 int hl_mmu_init(struct hl_device *hdev);
 void hl_mmu_fini(struct hl_device *hdev);
@@ -3943,6 +3978,7 @@ int hl_fw_cpucp_handshake(struct hl_device *hdev,
 				u32 boot_err1_reg);
 int hl_fw_get_eeprom_data(struct hl_device *hdev, void *data, size_t max_size);
 int hl_fw_get_monitor_dump(struct hl_device *hdev, void *data);
+int hl_fw_cpucp_nic_info_get(struct hl_device *hdev, dma_addr_t cpucp_nic_info_dma_addr);
 int hl_fw_cpucp_pci_counters_get(struct hl_device *hdev,
 		struct hl_info_pci_counters *counters);
 int hl_fw_cpucp_total_energy_get(struct hl_device *hdev,
@@ -4059,6 +4095,9 @@ void hl_capture_engine_err(struct hl_device *hdev, u16 engine_id, u16 error_coun
 void hl_enable_err_info_capture(struct hl_error_info *captured_err_info);
 void hl_init_cpu_for_irq(struct hl_device *hdev);
 void hl_set_irq_affinity(struct hl_device *hdev, int irq);
+int hl_get_hw_block_handle(struct hl_device *hdev, u64 address,
+				u64 *handle, u32 *size);
+bool hl_check_fd(struct file *file);
 
 #ifdef CONFIG_DEBUG_FS
 

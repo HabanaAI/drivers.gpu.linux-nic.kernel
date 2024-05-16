@@ -110,6 +110,11 @@ static const struct drm_driver hl_driver = {
 	.num_ioctls = ARRAY_SIZE(hl_drm_ioctls)
 };
 
+bool hl_check_fd(struct file *filp)
+{
+	return (filp->f_op == &hl_fops);
+}
+
 /*
  * get_asic_type - translate device id to asic type
  *
@@ -328,9 +333,27 @@ out_err:
 	return rc;
 }
 
+static u32 get_dev_nic_ports_mask(struct hl_device *hdev)
+{
+	enum hl_asic_type asic_type = hdev->asic_type;
+	u32 mask;
+
+	switch (asic_type) {
+	case ASIC_GAUDI2:
+	case ASIC_GAUDI2B:
+	case ASIC_GAUDI2C:
+		/* 24 ports are supported */
+		mask = 0xFFFFFF;
+		break;
+	default:
+		mask = 0;
+	}
+
+	return mask;
+}
+
 static void set_driver_behavior_per_device(struct hl_device *hdev)
 {
-	hdev->nic_ports_mask = 0;
 	hdev->fw_components = FW_TYPE_ALL_TYPES;
 	hdev->cpu_queues_enable = 1;
 	hdev->pldm = 0;
@@ -338,6 +361,7 @@ static void set_driver_behavior_per_device(struct hl_device *hdev)
 	hdev->bmc_enable = 1;
 	hdev->reset_on_preboot_fail = 1;
 	hdev->heartbeat = 1;
+	hdev->card_type = cpucp_card_type_pmc;
 }
 
 static void copy_kernel_module_params_to_device(struct hl_device *hdev)
@@ -377,6 +401,8 @@ static void fixup_device_params_per_asic(struct hl_device *hdev, int timeout)
 
 static int fixup_device_params(struct hl_device *hdev)
 {
+	struct hl_cn *cn = &hdev->cn;
+	u32 dev_nic_ports_mask;
 	int tmp_timeout;
 
 	tmp_timeout = timeout_locked;
@@ -405,6 +431,15 @@ static int fixup_device_params(struct hl_device *hdev)
 	/* If CPU queues not enabled, no way to do heartbeat */
 	if (!hdev->cpu_queues_enable)
 		hdev->heartbeat = 0;
+
+	/* Adjust NIC ports parameters according to the device in-hand */
+	dev_nic_ports_mask = get_dev_nic_ports_mask(hdev);
+
+	cn->ports_mask = dev_nic_ports_mask;
+	cn->ports_ext_mask = dev_nic_ports_mask;
+	cn->auto_neg_mask = dev_nic_ports_mask;
+	cn->skip_phy_init = hdev->pldm;
+
 	fixup_device_params_per_asic(hdev, tmp_timeout);
 
 	return 0;

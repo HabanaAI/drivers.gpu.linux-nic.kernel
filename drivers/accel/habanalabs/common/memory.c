@@ -1424,6 +1424,12 @@ static int map_block(struct hl_device *hdev, u64 address, u64 *handle, u32 *size
 	return 0;
 }
 
+int hl_get_hw_block_handle(struct hl_device *hdev, u64 address,
+				u64 *handle, u32 *size)
+{
+	return map_block(hdev, address, handle, size);
+}
+
 static void hw_block_vm_close(struct vm_area_struct *vma)
 {
 	struct hl_vm_hw_block_list_node *lnode =
@@ -2939,4 +2945,121 @@ void hl_hw_block_mem_fini(struct hl_ctx *ctx)
 	}
 
 	mutex_destroy(&ctx->hw_block_list_lock);
+}
+
+/**
+ * hl_map_vmalloc_range - Map vmalloc allocation to PMMU.
+ * @ctx: Associated context.
+ * @vmalloc_va: Start vmalloc virtual address.
+ * @device_va: Start device virtual address.
+ * @size: Size of allocation to map.
+ *
+ * Return: 0 on success, -ve on failure.
+ */
+int hl_map_vmalloc_range(struct hl_ctx *ctx, u64 vmalloc_va, u64 device_va, u64 size)
+{
+	struct hl_device *hdev = ctx->hdev;
+	struct hl_userptr *userptr = NULL;
+	struct hl_vm_phys_pg_pack *phys_pg_pack = NULL;
+	struct hl_vm_hash_node *hnode;
+	int rc;
+
+	/*
+	 * Iterate through vmalloc pages and map them for DMA via sg-list.
+	 * No need to pin the pages since we are mapping kernel memory which
+	 * is never swapped out.
+	 */
+	rc = dma_map_host_va(hdev, vmalloc_va, size, &userptr);
+	if (rc) {
+		dev_err(hdev->dev, "DMA mapping failed, vaddr 0x%llx\n", vmalloc_va);
+		return rc;
+	}
+
+	/*
+	 * Create pack of host pages which we will later map to pmmu.
+	 * Do not allow huge page optimization. We have pre allocated
+	 * device VA with preset notion of alignment which is same as
+	 * host page alignment.
+	 */
+	rc = init_phys_pg_pack_from_userptr(ctx, userptr, &phys_pg_pack, true);
+	if (rc) {
+		dev_err(hdev->dev, "Unable to init page pack, vaddr 0x%llx\n", vmalloc_va);
+		goto err_dma_unmap;
+	}
+
+	/* Validate kernel host VA and device VA are aligned to pmmu page size. */
+	if (device_va & (phys_pg_pack->page_size - 1) ||
+		vmalloc_va & (phys_pg_pack->page_size - 1)) {
+		dev_err(hdev->dev,
+			"Unaligned mapping, host VA 0x%llx, device VA 0x%llx, page size 0x%x",
+			vmalloc_va, device_va, phys_pg_pack->page_size);
+		rc = -EINVAL;
+		goto err_free_page_pack;
+	}
+
+	mutex_lock(&hdev->mmu_lock);
+
+	/* Map page pack to pmmu */
+	rc = map_phys_pg_pack(ctx, device_va, phys_pg_pack);
+	if (rc) {
+		mutex_unlock(&hdev->mmu_lock);
+		dev_err(hdev->dev, "Mapping page pack failed, vaddr 0x%llx, device VA 0x%llx\n",
+			vmalloc_va, device_va);
+		goto err_free_page_pack;
+	}
+
+	rc = hl_mmu_invalidate_cache_range(hdev,
+			false, userptr->vm_type | MMU_OP_SKIP_LOW_CACHE_INV,
+			ctx->asid, device_va, phys_pg_pack->total_size);
+
+	mutex_unlock(&hdev->mmu_lock);
+
+	if (rc)
+		goto err_free_unmap_page_pack;
+
+	/*
+	 * Keep track of mapping. Add mapped chunk to global hash list.
+	 * Context release uses this list for force release if this mapping
+	 * is not released gracefully.
+	 */
+	hnode = kzalloc(sizeof(*hnode), GFP_KERNEL);
+	if (!hnode) {
+		rc = -ENOMEM;
+		goto err_free_unmap_page_pack;
+	}
+
+	hnode->ptr = (void *) userptr;
+	hnode->vaddr = device_va;
+
+	mutex_lock(&ctx->mem_hash_lock);
+	hash_add(ctx->mem_hash, &hnode->node, device_va);
+	mutex_unlock(&ctx->mem_hash_lock);
+
+	free_phys_pg_pack(hdev, phys_pg_pack);
+
+	return 0;
+
+err_free_unmap_page_pack:
+	unmap_phys_pg_pack(ctx, device_va, phys_pg_pack);
+err_free_page_pack:
+	free_phys_pg_pack(hdev, phys_pg_pack);
+err_dma_unmap:
+	dma_unmap_host_va(hdev, userptr);
+	return rc;
+}
+
+/**
+ * hl_unmap_vmalloc_range - Unmap vmalloc allocation from PMMU.
+ * @ctx: Associated context.
+ * @device_va: Start device virtual address.
+ *
+ * Return: 0 on success, -ve on failure.
+ */
+int hl_unmap_vmalloc_range(struct hl_ctx *ctx, u64 device_va)
+{
+	struct hl_mem_in args = {
+		.unmap.device_virt_addr = device_va,
+	};
+
+	return unmap_device_va(ctx, &args, false);
 }

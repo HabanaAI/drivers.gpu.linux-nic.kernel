@@ -3222,7 +3222,7 @@ static void gaudi2_init_arcs(struct hl_device *hdev)
 			continue;
 
 		if (gaudi2_is_arc_nic_owned(arc_id) &&
-				!(hdev->nic_ports_mask & BIT_ULL(arc_id - CPU_ID_NIC_QMAN_ARC0)))
+				!(hdev->cn.ports_mask & BIT_ULL(arc_id - CPU_ID_NIC_QMAN_ARC0)))
 			continue;
 
 		if (gaudi2_is_arc_tpc_owned(arc_id) && !(gaudi2->tpc_hw_cap_initialized &
@@ -3996,7 +3996,7 @@ static void gaudi2_stop_nic_qmans(struct hl_device *hdev)
 	queue_id = GAUDI2_QUEUE_ID_NIC_0_0;
 
 	for (i = 0 ; i < NIC_NUMBER_OF_ENGINES ; i++, queue_id += NUM_OF_PQ_PER_QMAN) {
-		if (!(hdev->nic_ports_mask & BIT(i)))
+		if (!(hdev->cn.ports_mask & BIT(i)))
 			continue;
 
 		reg_base = gaudi2_qm_blocks_bases[queue_id];
@@ -4192,7 +4192,7 @@ static void gaudi2_disable_nic_qmans(struct hl_device *hdev)
 	queue_id = GAUDI2_QUEUE_ID_NIC_0_0;
 
 	for (i = 0 ; i < NIC_NUMBER_OF_ENGINES ; i++, queue_id += NUM_OF_PQ_PER_QMAN) {
-		if (!(hdev->nic_ports_mask & BIT(i)))
+		if (!(hdev->cn.ports_mask & BIT(i)))
 			continue;
 
 		reg_base = gaudi2_qm_blocks_bases[queue_id];
@@ -4661,7 +4661,7 @@ static void gaudi2_nic_qmans_manual_flush(struct hl_device *hdev)
 	queue_id = GAUDI2_QUEUE_ID_NIC_0_0;
 
 	for (i = 0 ; i < NIC_NUMBER_OF_ENGINES ; i++, queue_id += NUM_OF_PQ_PER_QMAN) {
-		if (!(hdev->nic_ports_mask & BIT(i)))
+		if (!(hdev->cn.ports_mask & BIT(i)))
 			continue;
 
 		gaudi2_qman_manual_flush_common(hdev, queue_id);
@@ -7279,7 +7279,7 @@ static bool gaudi2_get_nic_idle_status(struct hl_device *hdev, u64 *mask_arr, u8
 	u64 offset = 0;
 
 	/* NIC, twelve macros in Full chip */
-	if (e && hdev->nic_ports_mask)
+	if (e && hdev->cn.ports_mask)
 		hl_engine_data_sprintf(e,
 					"\nNIC  is_idle  QM_GLBL_STS0  QM_CGM_STS\n"
 					"---  -------  ------------  ----------\n");
@@ -7290,7 +7290,7 @@ static bool gaudi2_get_nic_idle_status(struct hl_device *hdev, u64 *mask_arr, u8
 		else
 			offset += NIC_QM_OFFSET;
 
-		if (!(hdev->nic_ports_mask & BIT(i)))
+		if (!(hdev->cn.ports_mask & BIT(i)))
 			continue;
 
 		engine_idx = GAUDI2_ENGINE_ID_NIC0_0 + i;
@@ -8333,7 +8333,7 @@ static void gaudi2_check_if_razwi_happened(struct hl_device *hdev)
 
 	/* check all NICs */
 	for (mod_idx = 0 ; mod_idx < NIC_NUMBER_OF_PORTS ; mod_idx++)
-		if (hdev->nic_ports_mask & BIT(mod_idx))
+		if (hdev->cn.ports_mask & BIT(mod_idx))
 			gaudi2_ack_module_razwi_event_handler(hdev, RAZWI_NIC, mod_idx >> 1, 0,
 								NULL);
 

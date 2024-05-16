@@ -108,6 +108,8 @@ static int hw_ip_info(struct hl_device *hdev, struct hl_info_args *args)
 
 	hw_ip.edma_enabled_mask = prop->edma_enabled_mask;
 	hw_ip.server_type = prop->server_type;
+	hw_ip.nic_ports_mask = hdev->cn.ports_mask;
+	hw_ip.nic_ports_external_mask = hdev->cn.eth_ports_mask;
 	hw_ip.security_enabled = prop->fw_security_enabled;
 	hw_ip.revision_id = hdev->pdev->revision;
 	hw_ip.rotator_enabled_mask = prop->rotator_enabled_mask;
