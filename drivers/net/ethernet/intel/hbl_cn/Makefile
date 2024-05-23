@@ -8,4 +8,7 @@ obj-$(CONFIG_HABANA_CN) := habanalabs_cn.o
 include $(src)/common/Makefile
 habanalabs_cn-y += $(HBL_CN_COMMON_FILES)
 
+include $(src)/gaudi2/Makefile
+habanalabs_cn-y += $(HBL_CN_GAUDI2_FILES)
+
 habanalabs_cn-$(CONFIG_DEBUG_FS) += common/hbl_cn_debugfs.o
