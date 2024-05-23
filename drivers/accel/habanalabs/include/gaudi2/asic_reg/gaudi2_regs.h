@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0
  *
- * Copyright 2020-2023 HabanaLabs, Ltd.
+ * Copyright 2020-2024 HabanaLabs, Ltd.
  * All Rights Reserved.
  *
  */
@@ -563,6 +563,14 @@
 #include "nic0_qm0_cgm_regs.h"
 #include "nic0_umr0_0_completion_queue_ci_1_regs.h"
 #include "nic0_umr0_0_unsecure_doorbell0_regs.h"
+#include "nic0_qm0_axuser_nonsecured_regs.h"
+#include "nic0_txe0_regs.h"
+#include "nic0_rxe0_regs.h"
+#include "nic0_rxe1_regs.h"
+#include "nic0_txs0_regs.h"
+#include "nic0_phy_regs.h"
+#include "nic0_qpc1_regs.h"
+#include "nic0_rxe0_regs.h"
 
 #define NIC_OFFSET		(mmNIC1_MSTR_IF_RR_SHRD_HBW_BASE - mmNIC0_MSTR_IF_RR_SHRD_HBW_BASE)
 
