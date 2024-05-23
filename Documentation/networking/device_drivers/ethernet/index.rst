@@ -40,6 +40,7 @@ Contents:
    intel/i40e
    intel/iavf
    intel/ice
+   intel/hbl
    marvell/octeontx2
    marvell/octeon_ep
    marvell/octeon_ep_vf
