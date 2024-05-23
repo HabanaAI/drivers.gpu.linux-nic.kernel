@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0
  *
- * Copyright 2020-2022 HabanaLabs, Ltd.
+ * Copyright 2020-2024 HabanaLabs, Ltd.
  * All Rights Reserved.
  *
  */
@@ -8,12 +8,15 @@
 #ifndef GAUDI2P_H_
 #define GAUDI2P_H_
 
+#include <linux/net/intel/cn_aux.h>
+#include <linux/net/intel/gaudi2_aux.h>
 #include <uapi/drm/habanalabs_accel.h>
 #include "../common/habanalabs.h"
 #include <linux/habanalabs/hl_boot_if.h>
 #include "../include/gaudi2/gaudi2.h"
 #include "../include/gaudi2/gaudi2_packets.h"
 #include "../include/gaudi2/gaudi2_fw_if.h"
+#include "../include/gaudi2/gaudi2_coresight.h"
 #include "../include/gaudi2/gaudi2_async_events.h"
 
 #define GAUDI2_LINUX_FW_FILE	"habanalabs/gaudi2/gaudi2-fit.itb"
@@ -86,7 +89,7 @@
 
 #define GAUDI2_BOOT_FIT_REQ_TIMEOUT_USEC	10000000	/* 10s */
 
-#define GAUDI2_NIC_CLK_FREQ			450000000ull	/* 450 MHz */
+#define GAUDI2_NIC_CLK_FREQ			488000000ull	/* 488 MHz */
 
 #define DC_POWER_DEFAULT			60000		/* 60W */
 
@@ -198,6 +201,7 @@
 						HW_CAP_HBM_SCRAMBLER_SW_RESET)
 #define HW_CAP_HBM_SCRAMBLER_SHIFT	41
 #define HW_CAP_RESERVED			BIT(43)
+#define HW_CAP_NIC_DRV			BIT(44)
 #define HW_CAP_MMU_MASK			(HW_CAP_PMMU | HW_CAP_DMMU_MASK)
 
 /* Range Registers */
@@ -239,6 +243,8 @@
 
 #define GAUDI2_NUM_TESTED_QS		(GAUDI2_QUEUE_ID_CPU_PQ - GAUDI2_QUEUE_ID_PDMA_0_0)
 
+extern u64 debug_bmon_regs[GAUDI2_BMON_LAST + 1];
+extern u64 debug_spmu_regs[GAUDI2_SPMU_LAST + 1];
 
 enum gaudi2_reserved_sob_id {
 	GAUDI2_RESERVED_SOB_CS_COMPLETION_FIRST,
@@ -251,6 +257,9 @@ enum gaudi2_reserved_sob_id {
 	GAUDI2_RESERVED_SOB_DEC_ABNRM_FIRST,
 	GAUDI2_RESERVED_SOB_DEC_ABNRM_LAST =
 			GAUDI2_RESERVED_SOB_DEC_ABNRM_FIRST + NUMBER_OF_DEC - 1,
+	GAUDI2_RESERVED_SOB_NIC_PORT_FIRST,
+	GAUDI2_RESERVED_SOB_NIC_PORT_LAST =
+			GAUDI2_RESERVED_SOB_NIC_PORT_FIRST + NIC_NUMBER_OF_PORTS - 1,
 	GAUDI2_RESERVED_SOB_NUMBER
 };
 
@@ -265,6 +274,9 @@ enum gaudi2_reserved_mon_id {
 	GAUDI2_RESERVED_MON_DEC_ABNRM_FIRST,
 	GAUDI2_RESERVED_MON_DEC_ABNRM_LAST =
 			GAUDI2_RESERVED_MON_DEC_ABNRM_FIRST + 3 * NUMBER_OF_DEC - 1,
+	GAUDI2_RESERVED_MON_NIC_PORT_FIRST,
+	GAUDI2_RESERVED_MON_NIC_PORT_LAST =
+			GAUDI2_RESERVED_MON_NIC_PORT_FIRST + 3 * NIC_NUMBER_OF_PORTS - 1,
 	GAUDI2_RESERVED_MON_NUMBER
 };
 
@@ -513,13 +525,8 @@ struct gaudi2_queues_test_info {
  * @events_stat: array that holds histogram of all received events.
  * @events_stat_aggregate: same as events_stat but doesn't get cleared on reset.
  * @num_of_valid_hw_events: used to hold the number of valid H/W events.
- * @nic_ports: array that holds all NIC ports manage structures.
- * @nic_macros: array that holds all NIC macro manage structures.
- * @core_info: core info to be used by the Ethernet driver.
- * @aux_ops: functions for core <-> aux drivers communication.
- * @flush_db_fifo: flag to force flush DB FIFO after a write.
- * @hbm_cfg: HBM subsystem settings
- * @hw_queues_lock_mutex: used by simulator instead of hw_queues_lock.
+ * @cn_aux_ops: functions for core <-> accel drivers communication.
+ * @cn_aux_data: data to be used by the core driver.
  * @queues_test_info: information used by the driver when testing the HW queues.
  */
 struct gaudi2_device {
@@ -548,6 +555,10 @@ struct gaudi2_device {
 	u32				events_stat[GAUDI2_EVENT_SIZE];
 	u32				events_stat_aggregate[GAUDI2_EVENT_SIZE];
 	u32				num_of_valid_hw_events;
+
+	/* NIC fields */
+	struct gaudi2_cn_aux_ops	cn_aux_ops;
+	struct gaudi2_cn_aux_data	cn_aux_data;
 
 	/* Queue testing */
 	struct gaudi2_queues_test_info	queues_test_info[GAUDI2_NUM_TESTED_QS];
@@ -588,6 +599,7 @@ enum gaudi2_block_types {
 	GAUDI2_BLOCK_TYPE_MAX
 };
 
+extern struct hl_cn_funcs gaudi2_cn_funcs;
 extern const u32 gaudi2_dma_core_blocks_bases[DMA_CORE_ID_SIZE];
 extern const u32 gaudi2_qm_blocks_bases[GAUDI2_QUEUE_ID_SIZE];
 extern const u32 gaudi2_mme_acc_blocks_bases[MME_ID_SIZE];
@@ -608,5 +620,16 @@ void gaudi2_pb_print_security_errors(struct hl_device *hdev, u32 block_addr, u32
 int gaudi2_init_security(struct hl_device *hdev);
 void gaudi2_ack_protection_bits_errors(struct hl_device *hdev);
 int gaudi2_send_device_activity(struct hl_device *hdev, bool open);
+
+/* Functions exported for NIC */
+void gaudi2_cn_spmu_get_stats_info(struct hl_device *hdev, u32 port, struct hbl_cn_stat **stats,
+					u32 *n_stats);
+int gaudi2_cn_spmu_config(struct hl_device *hdev, u32 port, u32 num_event_types, u32 event_types[],
+				bool enable);
+int gaudi2_cn_spmu_sample(struct hl_device *hdev, u32 port, u32 num_out_data, u64 out_data[]);
+void gaudi2_cn_disable_interrupts(struct hl_device *hdev);
+void gaudi2_cn_quiescence(struct hl_device *hdev);
+void gaudi2_cn_compute_reset_prepare(struct hl_device *hdev);
+void gaudi2_cn_compute_reset_late_init(struct hl_device *hdev);
 
 #endif /* GAUDI2P_H_ */

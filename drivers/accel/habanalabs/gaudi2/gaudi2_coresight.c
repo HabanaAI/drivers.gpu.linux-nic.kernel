@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 
 /*
- * Copyright 2019-2022 HabanaLabs, Ltd.
+ * Copyright 2019-2024 HabanaLabs, Ltd.
  * All Rights Reserved.
  */
 #include "gaudi2_coresight_regs.h"
@@ -9,6 +9,8 @@
 
 #define GAUDI2_PLDM_CORESIGHT_TIMEOUT_USEC	(CORESIGHT_TIMEOUT_USEC * 2000)
 #define SPMU_MAX_COUNTERS			6
+/* SPMU should also include overflow_idx and cycle_cnt_idx */
+#define SPMU_DATA_LEN				(SPMU_MAX_COUNTERS + 2)
 
 #define COMPONENT_ID_INVALID ((u32)(-1))
 #define MAX_BMONS_PER_UNIT 8
@@ -58,6 +60,23 @@ struct component_config_offsets {
 	u32 bmon_count;
 	u32 bmon_ids[MAX_BMONS_PER_UNIT];
 };
+
+static struct hbl_cn_stat gaudi2_nic0_spmu_stats[] = {
+	{"spmu_req_out_of_range_psn", 17},
+	{"spmu_req_unset_psn", 18},
+	{"spmu_res_duplicate_psn", 20},
+	{"spmu_res_out_of_sequence_psn", 21}
+};
+
+static struct hbl_cn_stat gaudi2_nic1_spmu_stats[] = {
+	{"spmu_req_out_of_range_psn", 5},
+	{"spmu_req_unset_psn", 6},
+	{"spmu_res_duplicate_psn", 8},
+	{"spmu_res_out_of_sequence_psn", 9}
+};
+
+static size_t gaudi2_nic0_spmu_stats_len = ARRAY_SIZE(gaudi2_nic0_spmu_stats);
+static size_t gaudi2_nic1_spmu_stats_len = ARRAY_SIZE(gaudi2_nic1_spmu_stats);
 
 static u64 debug_stm_regs[GAUDI2_STM_LAST + 1] = {
 	[GAUDI2_STM_DCORE0_TPC0_EML] = mmDCORE0_TPC0_EML_STM_BASE,
@@ -489,7 +508,7 @@ static u64 debug_funnel_regs[GAUDI2_FUNNEL_LAST + 1] = {
 	[GAUDI2_FUNNEL_NIC11_DBG_NCH] = mmNIC11_DBG_FUNNEL_NCH_BASE
 };
 
-static u64 debug_bmon_regs[GAUDI2_BMON_LAST + 1] = {
+u64 debug_bmon_regs[GAUDI2_BMON_LAST + 1] = {
 	[GAUDI2_BMON_DCORE0_TPC0_EML_0] = mmDCORE0_TPC0_EML_BUSMON_0_BASE,
 	[GAUDI2_BMON_DCORE0_TPC0_EML_1] = mmDCORE0_TPC0_EML_BUSMON_1_BASE,
 	[GAUDI2_BMON_DCORE0_TPC0_EML_2] = mmDCORE0_TPC0_EML_BUSMON_2_BASE,
@@ -877,7 +896,7 @@ static u64 debug_bmon_regs[GAUDI2_BMON_LAST + 1] = {
 	[GAUDI2_BMON_NIC11_DBG_2_1] = mmNIC11_DBG_BMON2_1_BASE
 };
 
-static u64 debug_spmu_regs[GAUDI2_SPMU_LAST + 1] = {
+u64 debug_spmu_regs[GAUDI2_SPMU_LAST + 1] = {
 	[GAUDI2_SPMU_DCORE0_TPC0_EML] = mmDCORE0_TPC0_EML_SPMU_BASE,
 	[GAUDI2_SPMU_DCORE0_TPC1_EML] = mmDCORE0_TPC1_EML_SPMU_BASE,
 	[GAUDI2_SPMU_DCORE0_TPC2_EML] = mmDCORE0_TPC2_EML_SPMU_BASE,
@@ -2432,6 +2451,11 @@ static int gaudi2_config_bmon(struct hl_device *hdev, struct hl_debug_params *pa
 	return 0;
 }
 
+static bool gaudi2_reg_is_nic_spmu(enum gaudi2_debug_spmu_regs_index reg_idx)
+{
+	return reg_idx >= GAUDI2_SPMU_NIC0_DBG_0 && reg_idx <= GAUDI2_SPMU_NIC11_DBG_1;
+}
+
 static int gaudi2_config_spmu(struct hl_device *hdev, struct hl_debug_params *params)
 {
 	struct hl_debug_params_spmu *input = params->input;
@@ -2540,6 +2564,121 @@ static int gaudi2_config_spmu(struct hl_device *hdev, struct hl_debug_params *pa
 	}
 
 	return 0;
+}
+
+static int gaudi2_sample_spmu(struct hl_device *hdev, struct hl_debug_params *params)
+{
+	u32 output_arr_len;
+	u32 events_num;
+	u64 base_reg;
+	u64 *output;
+	int i;
+
+	if (params->reg_idx >= ARRAY_SIZE(debug_spmu_regs)) {
+		dev_err(hdev->dev, "Invalid register index in SPMU\n");
+		return -EINVAL;
+	}
+
+	base_reg = debug_spmu_regs[params->reg_idx];
+
+	 /* in case base reg is 0x0 we ignore this configuration */
+	if (!base_reg)
+		return 0;
+
+	output = params->output;
+	output_arr_len = params->output_size / sizeof(u64);
+	events_num = output_arr_len;
+
+	if (output_arr_len < 1) {
+		dev_err(hdev->dev, "not enough values for SPMU sample\n");
+		return -EINVAL;
+	}
+
+	if (events_num > SPMU_MAX_COUNTERS) {
+		dev_err(hdev->dev, "too many events values for SPMU sample\n");
+		return -EINVAL;
+	}
+
+	/* capture */
+	WREG32(base_reg + mmSPMU_PMSCR_OFFSET, 1);
+
+	/* read the shadow registers */
+	for (i = 0 ; i < events_num ; i++)
+		output[i] = RREG32(base_reg + mmSPMU_PMEVCNTSR0_OFFSET + i * 4);
+
+	return 0;
+}
+
+void gaudi2_cn_spmu_get_stats_info(struct hl_device *hdev, u32 port, struct hbl_cn_stat **stats,
+					u32 *n_stats)
+{
+	if (!hdev->supports_coresight) {
+		*n_stats = 0;
+		return;
+	}
+
+	if (port & 1) {
+		*n_stats = gaudi2_nic1_spmu_stats_len;
+		*stats = gaudi2_nic1_spmu_stats;
+	} else {
+		*n_stats = gaudi2_nic0_spmu_stats_len;
+		*stats = gaudi2_nic0_spmu_stats;
+	}
+}
+
+int gaudi2_cn_spmu_config(struct hl_device *hdev, u32 port, u32 num_event_types, u32 event_types[],
+				bool enable)
+{
+	struct hl_debug_params_spmu spmu;
+	struct hl_debug_params params;
+	u64 event_counters[SPMU_DATA_LEN];
+	int i;
+
+	if (!hdev->supports_coresight)
+		return 0;
+
+	/* validate nic port */
+	if  (!gaudi2_reg_is_nic_spmu(GAUDI2_SPMU_NIC0_DBG_0 + port)) {
+		dev_err(hdev->dev, "Invalid nic port %u\n", port);
+		return -EINVAL;
+	}
+
+	memset(&params, 0, sizeof(struct hl_debug_params));
+	params.op = HL_DEBUG_OP_SPMU;
+	params.input = &spmu;
+	params.enable = enable;
+	params.output_size = sizeof(event_counters);
+	params.output = event_counters;
+	params.reg_idx = GAUDI2_SPMU_NIC0_DBG_0 + port;
+
+	memset(&spmu, 0, sizeof(struct hl_debug_params_spmu));
+	spmu.event_types_num = num_event_types;
+
+	for (i = 0 ; i < spmu.event_types_num ; i++)
+		spmu.event_types[i] = event_types[i];
+
+	return gaudi2_config_spmu(hdev, &params);
+}
+
+int gaudi2_cn_spmu_sample(struct hl_device *hdev, u32 port, u32 num_out_data, u64 out_data[])
+{
+	struct hl_debug_params params;
+
+	if (!hdev->supports_coresight)
+		return 0;
+
+	/* validate nic port */
+	if  (!gaudi2_reg_is_nic_spmu(GAUDI2_SPMU_NIC0_DBG_0 + port)) {
+		dev_err(hdev->dev, "Invalid nic port %u\n", port);
+		return -EINVAL;
+	}
+
+	memset(&params, 0, sizeof(struct hl_debug_params));
+	params.output = out_data;
+	params.output_size = num_out_data * sizeof(u64);
+	params.reg_idx = GAUDI2_SPMU_NIC0_DBG_0 + port;
+
+	return gaudi2_sample_spmu(hdev, &params);
 }
 
 int gaudi2_debug_coresight(struct hl_device *hdev, struct hl_ctx *ctx, void *data)
