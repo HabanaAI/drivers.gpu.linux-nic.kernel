@@ -6,6 +6,7 @@
 config INFINIBAND_HBL
 	tristate "HabanaLabs (an Intel Company) InfiniBand driver"
 	depends on NETDEVICES && ETHERNET && PCI && INET
+	depends on INFINIBAND_USER_ACCESS
 	select HABANA_CN
 	help
 	  This driver enables InfiniBand functionality for the network

@@ -22,6 +22,16 @@ MODULE_LICENSE("GPL");
 
 #define MTU_DEFAULT	SZ_4K
 
+static const struct uapi_definition hbl_defs[] = {
+#if IS_ENABLED(CONFIG_INFINIBAND_USER_ACCESS)
+	UAPI_DEF_CHAIN(hbl_usr_fifo_defs),
+	UAPI_DEF_CHAIN(hbl_set_port_ex_defs),
+	UAPI_DEF_CHAIN(hbl_query_port_defs),
+	UAPI_DEF_CHAIN(hbl_encap_defs),
+#endif
+	{}
+};
+
 static void hbl_ib_port_event(struct ib_device *ibdev, u32 port_num, enum ib_event_type reason)
 {
 	struct ib_event event;
@@ -165,6 +175,11 @@ static int hbl_ib_dev_init(struct hbl_ib_device *hdev)
 	ibdev->num_comp_vectors = 1;
 
 	ib_set_device_ops(ibdev, &hbl_ib_dev_ops);
+
+	if (IS_ENABLED(CONFIG_INFINIBAND_USER_ACCESS))
+		ibdev->driver_def = hbl_defs;
+	else
+		dev_info(hdev->dev, "IB user access is disabled\n");
 
 	/* The CN driver might start calling the aux functions after registering the device so set
 	 * the callbacks here.
