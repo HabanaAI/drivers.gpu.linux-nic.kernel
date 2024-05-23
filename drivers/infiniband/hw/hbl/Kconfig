@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# HabanaLabs (an Intel Company) Infiniband driver configuration
+#
+
+config INFINIBAND_HBL
+	tristate "HabanaLabs (an Intel Company) InfiniBand driver"
+	depends on NETDEVICES && ETHERNET && PCI && INET
+	select HABANA_CN
+	help
+	  This driver enables InfiniBand functionality for the network
+	  interfaces that are part of the GAUDI ASIC family of AI Accelerators.
+	  The network interfaces are mainly used for scaling-out the training of
+	  AI Neural Networks through ROCEv2 protocol.
+
+	  To compile this driver as a module, choose M here. The module
+	  will be called habanalabs_ib.

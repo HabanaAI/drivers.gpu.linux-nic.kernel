@@ -9626,6 +9626,16 @@ F:	drivers/net/ethernet/intel/hbl_en/
 F:	include/linux/net/intel/cn*
 F:	include/linux/net/intel/gaudi2*
 
+HABANALABS IB DRIVER
+M:	Omer Shpigelman <oshpigelman@habana.ai>
+L:	linux-rdma@vger.kernel.org
+S:	Supported
+W:	https://www.habana.ai
+Q:	https://patchwork.kernel.org/project/linux-rdma/list/
+F:	drivers/infiniband/hw/hbl/
+F:	include/linux/net/intel/cn*
+F:	include/uapi/rdma/hbl-abi.h
+
 HACKRF MEDIA DRIVER
 L:	linux-media@vger.kernel.org
 S:	Orphan
