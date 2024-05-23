@@ -1747,6 +1747,8 @@ static int hbl_cn_set_asic_funcs(struct hbl_cn_device *hdev)
 {
 	switch (hdev->asic_type) {
 	case HBL_ASIC_GAUDI2:
+		gaudi2_cn_set_asic_funcs(hdev);
+		break;
 	default:
 		dev_err(hdev->dev, "Unrecognized ASIC type %d\n", hdev->asic_type);
 		return -EINVAL;

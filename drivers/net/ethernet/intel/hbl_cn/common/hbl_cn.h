@@ -1644,6 +1644,8 @@ void hbl_cn_fw_status_work(struct work_struct *work);
 int hbl_cn_get_src_ip(struct hbl_cn_port *cn_port, u32 *src_ip);
 void hbl_cn_ctx_resources_destroy(struct hbl_cn_device *hdev, struct hbl_cn_ctx *ctx);
 
+void gaudi2_cn_set_asic_funcs(struct hbl_cn_device *hdev);
+
 int __hbl_cn_ports_reopen(struct hbl_cn_device *hdev);
 void __hbl_cn_hard_reset_prepare(struct hbl_cn_device *hdev, bool fw_reset, bool in_teardown);
 void __hbl_cn_stop(struct hbl_cn_device *hdev);
