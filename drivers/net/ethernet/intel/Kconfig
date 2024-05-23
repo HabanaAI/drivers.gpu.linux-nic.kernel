@@ -397,4 +397,24 @@ config IDPF
 	  To compile this driver as a module, choose M here. The module
 	  will be called idpf.
 
+config HABANA_CN
+	tristate "HabanaLabs (an Intel Company) Core Network driver"
+	depends on X86_64
+	depends on PCI
+	select AUXILIARY_BUS
+	default n
+	help
+	  This driver enables the infrastructure for network functionality that
+	  is part of the GAUDI ASIC family of AI Accelerators.
+	  For more information on how to identify your adapter, go to the
+	  Adapter & Driver ID Guide that can be located at:
+
+	  <http://support.intel.com>
+
+	  More specific information on configuring the driver is in
+	  <file:Documentation/networking/device_drivers/ethernet/intel/hbl.rst>.
+
+	  To compile this driver as a module, choose M here. The module
+	  will be called habanalabs_cn.
+
 endif # NET_VENDOR_INTEL

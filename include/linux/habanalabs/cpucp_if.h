@@ -366,6 +366,27 @@ struct hl_eq_addr_dec_intr_data {
 	__u8 pad[7];
 };
 
+#define MAX_PORTS_PER_NIC	4
+
+/* NIC interrupt type */
+enum hl_nic_interrupt_type {
+	NIC_INTR_NONE = 0,
+	NIC_INTR_TMR = 1,
+	NIC_INTR_RXB_CORE_SPI,
+	NIC_INTR_RXB_CORE_SEI,
+	NIC_INTR_QPC_RESP_ERR,
+	NIC_INTR_RXE_SPI,
+	NIC_INTR_RXE_SEI,
+	NIC_INTR_TXS,
+	NIC_INTR_TXE,
+};
+
+struct hl_eq_nic_intr_cause {
+	__le32 intr_type; /* enum hl_nic_interrupt_type */
+	__le32 pad;
+	struct hl_eq_intr_cause intr_cause[MAX_PORTS_PER_NIC];
+};
+
 struct hl_eq_entry {
 	struct hl_eq_header hdr;
 	union {
@@ -382,6 +403,7 @@ struct hl_eq_entry {
 		struct hl_eq_hbm_sei_data sei_data;	/* Gaudi2 HBM */
 		struct hl_eq_engine_arc_intr_data arc_data;
 		struct hl_eq_addr_dec_intr_data addr_dec;
+		struct hl_eq_nic_intr_cause nic_intr_cause;
 		__le64 data[7];
 	};
 };
@@ -665,6 +687,9 @@ enum pq_init_status {
  *       by the host to prevent replay attacks. public key and certificate also
  *       provided as part of the FW response.
  *
+ * CPUCP_PACKET_NIC_SET_CHECKERS -
+ *       Packet to set a specific NIC checker bit.
+ *
  * CPUCP_PACKET_MONITOR_DUMP_GET -
  *       Get monitors registers dump from the CpuCP kernel.
  *       The CPU will put the registers dump in the a buffer allocated by the driver
@@ -672,6 +697,14 @@ enum pq_init_status {
  *       passes the max size it allows the CpuCP to write to the structure, to prevent
  *       data corruption in case of mismatched driver/FW versions.
  *       Obsolete.
+ *
+ * CPUCP_PACKET_NIC_WQE_ASID_SET -
+ *       Packet to set nic wqe asid as the registers needed are privilege and to be configured by FW
+ *
+ * CPUCP_PACKET_NIC_ECC_INTRS_UNMASK -
+ *       Packet to unmask NIC memory registers which are masked at preboot stage. As per the Arch
+ *       team recommendation, NIC memory ECC errors should be unmasked after NIC driver is up and
+ *       running
  *
  * CPUCP_PACKET_GENERIC_PASSTHROUGH -
  *       Generic opcode for all firmware info that is only passed to host
@@ -681,12 +714,28 @@ enum pq_init_status {
  *       LKD sends FW indication whether device is free or in use, this indication is reported
  *       also to the BMC.
  *
+ * CPUCP_PACKET_NIC_MAC_TX_RESET -
+ *       Packet to reset the NIC MAC Tx.
+ *
+ * CPUCP_PACKET_NIC_WQE_ASID_UNSET -
+ *       Packet to unset nic wqe asid as the registers needed are privilege and to be configured
+ *       by FW.
+ *
  * CPUCP_PACKET_SOFT_RESET -
  *       Packet to perform soft-reset.
  *
  * CPUCP_PACKET_INTS_REGISTER -
  *       Packet to inform FW that queues have been established and LKD is ready to receive
  *       EQ events.
+ *
+ * CPUCP_PACKET_NIC_INIT_TXS_MEM -
+ *      Init TXS related memory in HBM.
+ *
+ * CPUCP_PACKET_NIC_INIT_TMR_MEM -
+ *      Init HW timer related memory in HBM.
+ *
+ * CPUCP_PACKET_NIC_CLR_MEM -
+ *      Clear NIC related memory in HBM.
  */
 
 enum cpucp_packet_id {
@@ -740,21 +789,24 @@ enum cpucp_packet_id {
 	CPUCP_PACKET_RESERVED2,			/* not used */
 	CPUCP_PACKET_SEC_ATTEST_GET,		/* internal */
 	CPUCP_PACKET_INFO_SIGNED_GET,		/* internal */
-	CPUCP_PACKET_RESERVED4,			/* not used */
+	CPUCP_PACKET_NIC_SET_CHECKERS,		/* internal */
 	CPUCP_PACKET_MONITOR_DUMP_GET,		/* debugfs */
-	CPUCP_PACKET_RESERVED5,			/* not used */
-	CPUCP_PACKET_RESERVED6,			/* not used */
-	CPUCP_PACKET_RESERVED7,			/* not used */
+	CPUCP_PACKET_RESERVED3,			/* not used */
+	CPUCP_PACKET_NIC_WQE_ASID_SET,		/* internal */
+	CPUCP_PACKET_NIC_ECC_INTRS_UNMASK,	/* internal */
 	CPUCP_PACKET_GENERIC_PASSTHROUGH,	/* IOCTL */
-	CPUCP_PACKET_RESERVED8,			/* not used */
+	CPUCP_PACKET_RESERVED4,			/* not used */
 	CPUCP_PACKET_ACTIVE_STATUS_SET,		/* internal */
-	CPUCP_PACKET_RESERVED9,			/* not used */
-	CPUCP_PACKET_RESERVED10,		/* not used */
-	CPUCP_PACKET_RESERVED11,		/* not used */
-	CPUCP_PACKET_RESERVED12,		/* internal */
-	CPUCP_PACKET_RESERVED13,                /* internal */
+	CPUCP_PACKET_NIC_MAC_TX_RESET,		/* internal */
+	CPUCP_PACKET_RESERVED5,			/* not used */
+	CPUCP_PACKET_NIC_WQE_ASID_UNSET,	/* internal */
+	CPUCP_PACKET_RESERVED6,			/* internal */
+	CPUCP_PACKET_RESERVED7,			/* internal */
 	CPUCP_PACKET_SOFT_RESET,		/* internal */
 	CPUCP_PACKET_INTS_REGISTER,		/* internal */
+	CPUCP_PACKET_NIC_INIT_TXS_MEM,		/* internal */
+	CPUCP_PACKET_NIC_INIT_TMR_MEM,		/* internal */
+	CPUCP_PACKET_NIC_CLR_MEM,		/* internal */
 	CPUCP_PACKET_ID_MAX			/* must be last */
 };
 
@@ -861,6 +913,9 @@ struct cpucp_packet {
 	union {
 		/* For NIC requests */
 		__le32 port_index;
+
+		/* For NIC requests */
+		__le32 macro_index;
 
 		/* For Generic packet sub index */
 		__le32 pkt_subidx;
@@ -1056,6 +1111,21 @@ enum pvt_index {
 	PVT_SE,
 	PVT_NW,
 	PVT_NE
+};
+
+#define NIC_CHECKERS_TYPE_SHIFT		0
+#define NIC_CHECKERS_TYPE_MASK		0xFFFF
+#define NIC_CHECKERS_CHECK_SHIFT	16
+#define NIC_CHECKERS_CHECK_MASK		0x1
+#define NIC_CHECKERS_DROP_SHIFT		17
+#define NIC_CHECKERS_DROP_MASK		0x1
+
+enum nic_checkers_types {
+	RX_PKT_BAD_FORMAT = 0,
+	RX_INV_OPCODE,
+	RX_INV_SYNDROME,
+	RX_WQE_IDX_MISMATCH,
+	TX_WQE_IDX_MISMATCH = 0x80
 };
 
 /* Event Queue Packets */
@@ -1273,6 +1343,7 @@ struct ser_val {
  * @post_fec_ser: post FEC SER value.
  * @throughput: measured throughput.
  * @latency: measured latency.
+ * @port_toggle_cnt: counts how many times the link toggled since last port PHY init.
  */
 struct cpucp_nic_status {
 	__le32 port;
@@ -1292,6 +1363,8 @@ struct cpucp_nic_status {
 	struct ser_val post_fec_ser;
 	struct frac_val bandwidth;
 	struct frac_val lat;
+	__le32 port_toggle_cnt;
+	__u8 reserved[4];
 };
 
 enum cpucp_hbm_row_replace_cause {
@@ -1418,6 +1491,38 @@ struct cpucp_monitor_dump {
  */
 enum hl_passthrough_type {
 	HL_PASSTHROUGH_VERSIONS,
+};
+
+/* structure cpucp_cn_init_hw_mem_packet - used for initializing the associated CN (Core Network)
+ * hw(TIMER, TX-SCHEDQ) memory in HBM using the provided parameters.
+ * @cpucp_pkt: basic cpucp packet, the rest of the parameters extend the packet.
+ * @mem_base_addr: base address of the associated memory
+ * @num_entries: number of entries.
+ * @entry_size: size of entry.
+ * @granularity: base value for first element.
+ * @pad: padding
+ */
+struct cpucp_cn_init_hw_mem_packet {
+	struct cpucp_packet cpucp_pkt;
+	__le64 mem_base_addr;
+	__le16 num_entries;
+	__le16 entry_size;
+	__le16 granularity;
+	__u8 pad[2];
+};
+
+/* structure cpucp_cn_clear_mem_packet - used for clearing the associated CN (Core Network)
+ * memory in HBM using the provided parameters.
+ * @cpucp_pkt: basic cpucp packet, the rest of the parameters extend the packet.
+ * @mem_base_addr: base address of the associated memory
+ * @size: size in bytes of the associated memory.
+ * @pad: padding
+ */
+struct cpucp_cn_clear_mem_packet {
+	struct cpucp_packet cpucp_pkt;
+	__le64 mem_base_addr;
+	__le32 size;
+	__u8 pad[4];
 };
 
 #endif /* CPUCP_IF_H */
