@@ -1,0 +1,61 @@
+/* SPDX-License-Identifier: GPL-2.0
+ *
+ * Copyright 2020-2024 HabanaLabs, Ltd.
+ * Copyright (C) 2023-2024, Intel Corporation.
+ * All Rights Reserved.
+ *
+ */
+
+/************************************
+ ** This is an auto-generated file **
+ **       DO NOT EDIT BELOW        **
+ ************************************/
+
+#ifndef ASIC_REG_NIC0_TMR_AXUSER_TMR_FSM_REGS_H_
+#define ASIC_REG_NIC0_TMR_AXUSER_TMR_FSM_REGS_H_
+
+/*****************************************
+ *   NIC0_TMR_AXUSER_TMR_FSM
+ *   (Prototype: AXUSER)
+ *****************************************
+ */
+
+#define NIC0_TMR_AXUSER_TMR_FSM_HB_ASID 0x5448E20
+
+#define NIC0_TMR_AXUSER_TMR_FSM_HB_MMU_BP 0x5448E24
+
+#define NIC0_TMR_AXUSER_TMR_FSM_HB_STRONG_ORDER 0x5448E28
+
+#define NIC0_TMR_AXUSER_TMR_FSM_HB_NO_SNOOP 0x5448E2C
+
+#define NIC0_TMR_AXUSER_TMR_FSM_HB_WR_REDUCTION 0x5448E30
+
+#define NIC0_TMR_AXUSER_TMR_FSM_HB_RD_ATOMIC 0x5448E34
+
+#define NIC0_TMR_AXUSER_TMR_FSM_HB_QOS 0x5448E38
+
+#define NIC0_TMR_AXUSER_TMR_FSM_HB_RSVD 0x5448E3C
+
+#define NIC0_TMR_AXUSER_TMR_FSM_HB_EMEM_CPAGE 0x5448E40
+
+#define NIC0_TMR_AXUSER_TMR_FSM_HB_CORE 0x5448E44
+
+#define NIC0_TMR_AXUSER_TMR_FSM_E2E_COORD 0x5448E48
+
+#define NIC0_TMR_AXUSER_TMR_FSM_HB_WR_OVRD_LO 0x5448E50
+
+#define NIC0_TMR_AXUSER_TMR_FSM_HB_WR_OVRD_HI 0x5448E54
+
+#define NIC0_TMR_AXUSER_TMR_FSM_HB_RD_OVRD_LO 0x5448E58
+
+#define NIC0_TMR_AXUSER_TMR_FSM_HB_RD_OVRD_HI 0x5448E5C
+
+#define NIC0_TMR_AXUSER_TMR_FSM_LB_COORD 0x5448E60
+
+#define NIC0_TMR_AXUSER_TMR_FSM_LB_LOCK 0x5448E64
+
+#define NIC0_TMR_AXUSER_TMR_FSM_LB_RSVD 0x5448E68
+
+#define NIC0_TMR_AXUSER_TMR_FSM_LB_OVRD 0x5448E6C
+
+#endif /* ASIC_REG_NIC0_TMR_AXUSER_TMR_FSM_REGS_H_ */
