@@ -3,6 +3,7 @@ obj-$(CONFIG_INFINIBAND_MTHCA)		+= mthca/
 obj-$(CONFIG_INFINIBAND_QIB)		+= qib/
 obj-$(CONFIG_INFINIBAND_CXGB4)		+= cxgb4/
 obj-$(CONFIG_INFINIBAND_EFA)		+= efa/
+obj-$(CONFIG_INFINIBAND_HBL)		+= hbl/
 obj-$(CONFIG_INFINIBAND_IRDMA)		+= irdma/
 obj-$(CONFIG_MANA_INFINIBAND)		+= mana/
 obj-$(CONFIG_MLX4_INFINIBAND)		+= mlx4/
