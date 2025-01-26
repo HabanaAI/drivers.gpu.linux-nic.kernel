@@ -112,11 +112,11 @@ static inline int wait_for_qpc_idle(struct hbl_cn_port *cn_port, struct hbl_cn_q
 		/* Release lock while we wait before retry.
 		 * Note, we can assert that we are already locked.
 		 */
-		port_funcs->cfg_unlock(cn_port);
+		hlb_cn_cfg_unlock(cn_port);
 
 		msleep(20);
 
-		port_funcs->cfg_lock(cn_port);
+		hlb_cn_cfg_lock(cn_port);
 	}
 
 	rc = port_funcs->qpc_query(cn_port, qp->qp_id, is_req, &qpc_attr);
