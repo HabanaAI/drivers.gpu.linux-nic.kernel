@@ -1822,7 +1822,6 @@ static int gaudi2_cn_qpc_write_masked(struct hbl_cn_port *cn_port, const void *q
 bool gaudi2_handle_qp_error_retry(struct hbl_cn_port *cn_port, u32 qpn)
 {
 	struct hbl_cn_device *hdev = cn_port->hdev;
-	struct hbl_cn_asic_port_funcs *port_funcs;
 	struct gaudi2_qpc_requester req_qpc = {};
 	struct qpc_mask mask = {};
 	int port = cn_port->port;
@@ -1832,12 +1831,11 @@ bool gaudi2_handle_qp_error_retry(struct hbl_cn_port *cn_port, u32 qpn)
 	u8 timeout_max;
 	u64 wq_delay;
 
-	port_funcs = hdev->asic_funcs->port_funcs;
-	port_funcs->cfg_lock(cn_port);
+	hbl_cn_cfg_lock(cn_port);
 	qp = xa_load(&cn_port->qp_ids, qpn);
 
 	if (!qp) {
-		port_funcs->cfg_unlock(cn_port);
+		hbl_cn_cfg_unlock(cn_port);
 		dev_err(hdev->dev, "adaptive retry, port %d, QP: %d is null\n",
 			port, qpn);
 
@@ -1874,7 +1872,7 @@ bool gaudi2_handle_qp_error_retry(struct hbl_cn_port *cn_port, u32 qpn)
 		} while (retry);
 
 		if (!retry) {
-			port_funcs->cfg_unlock(cn_port);
+			hbl_cn_cfg_unlock(cn_port);
 			dev_err(hdev->dev, "failed to clear QPC error port %d, %d\n", port, qpn);
 
 			return false;
@@ -1889,14 +1887,14 @@ bool gaudi2_handle_qp_error_retry(struct hbl_cn_port *cn_port, u32 qpn)
 		queue_delayed_work(cn_port->qp_wq, &qp->adaptive_tmr_reset,
 				   msecs_to_jiffies(wq_delay / 1000));
 
-		port_funcs->cfg_unlock(cn_port);
+		hbl_cn_cfg_unlock(cn_port);
 
 		return true;
 	}
 
 	qp->timeout_curr = qp->timeout_granularity - (NIC_ADAPTIVE_TIMEOUT_RANGE >> 1);
 
-	port_funcs->cfg_unlock(cn_port);
+	hbl_cn_cfg_unlock(cn_port);
 
 	return false;
 }
@@ -5312,7 +5310,6 @@ static void gaudi2_cn_set_port_status(struct hbl_cn_port *cn_port, bool up)
 static void gaudi2_cn_adaptive_tmr_reset(struct hbl_cn_qp *qp)
 {
 	struct hbl_cn_port *cn_port = qp->cn_port;
-	struct hbl_cn_asic_port_funcs *port_funcs;
 	struct gaudi2_qpc_requester req_qpc;
 	struct hbl_cn_device *hdev;
 	u64 retry_count;
@@ -5322,9 +5319,7 @@ static void gaudi2_cn_adaptive_tmr_reset(struct hbl_cn_qp *qp)
 	hdev = cn_port->hdev;
 	user_gran = qp->timeout_granularity - NIC_ADAPTIVE_TIMEOUT_RANGE / 2;
 
-	port_funcs = hdev->asic_funcs->port_funcs;
-
-	port_funcs->cfg_lock(cn_port);
+	hbl_cn_cfg_lock(cn_port);
 	rc = gaudi2_cn_qpc_read(cn_port, &req_qpc, qp->qp_id, true);
 
 	if (rc)
@@ -5344,7 +5339,7 @@ static void gaudi2_cn_adaptive_tmr_reset(struct hbl_cn_qp *qp)
 	}
 
 out:
-	port_funcs->cfg_unlock(cn_port);
+	hbl_cn_cfg_unlock(cn_port);
 }
 
 static int gaudi2_cn_send_cpucp_packet(struct hbl_cn_port *cn_port, enum cpucp_packet_id packet_id,
