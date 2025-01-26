@@ -177,9 +177,9 @@ int gaudi2_cn_debugfs_qp_read(struct hbl_cn_device *hdev, struct hbl_cn_qp_info 
 		return -EPERM;
 	}
 
-	port_funcs->cfg_lock(cn_port);
+	hlb_cn_cfg_lock(cn_port);
 	rc = gaudi2_cn_qpc_read(cn_port, qpc, qpn, req);
-	port_funcs->cfg_unlock(cn_port);
+	hlb_cn_cfg_unlock(cn_port);
 	if (rc)
 		return rc;
 
@@ -283,9 +283,9 @@ int gaudi2_cn_debugfs_wqe_read(struct hbl_cn_device *hdev, char *buf, size_t bsi
 		return -EPERM;
 	}
 
-	port_funcs->cfg_lock(cn_port);
+	hlb_cn_cfg_lock(cn_port);
 	rc = gaudi2_cn_wqe_read(cn_port, wqe, qpn, wqe_idx, tx);
-	port_funcs->cfg_unlock(cn_port);
+	hlb_cn_cfg_unlock(cn_port);
 	if (rc)
 		goto exit;
 
