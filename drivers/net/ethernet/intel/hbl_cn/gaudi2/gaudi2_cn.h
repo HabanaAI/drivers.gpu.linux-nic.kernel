@@ -305,7 +305,6 @@ struct gaudi2_cn_port;
  * @eq_work: EQ work for processing events (e.g Tx completion).
  * @qp_sanity_work: QPC sanity check worker.
  * @qp_sanity_wq: QPC sanity worker thread.
- * @cfg_lock: Serializes the port configuration.
  * @qp_destroy_lock: protects the MAC loopback switching for QP destroy flow.
  * @pcs_link_stady_state_ts: the timestamp to move to the pcs link steady state.
  * @pcs_link_state: the current pcs link state.
@@ -332,8 +331,6 @@ struct gaudi2_cn_port {
 	struct delayed_work eq_work;
 	struct delayed_work qp_sanity_work;
 	struct workqueue_struct *qp_sanity_wq;
-	/* Serializes the port configuration */
-	struct mutex cfg_lock;
 	/* protects the MAC loopback switching for QP destroy flow */
 	struct mutex qp_destroy_lock;
 	ktime_t pcs_link_stady_state_ts;

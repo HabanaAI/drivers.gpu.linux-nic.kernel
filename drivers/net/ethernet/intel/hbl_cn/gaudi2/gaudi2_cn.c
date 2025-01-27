@@ -755,7 +755,6 @@ static void gaudi2_cn_port_sw_fini(struct hbl_cn_port *cn_port)
 	struct gaudi2_cn_port *gaudi2_port = cn_port->cn_specific;
 
 	mutex_destroy(&gaudi2_port->qp_destroy_lock);
-	mutex_destroy(&gaudi2_port->cfg_lock);
 
 	hbl_cn_eq_dispatcher_fini(cn_port);
 	gaudi2_cn_free_rings_resources(gaudi2_port);
@@ -795,7 +794,6 @@ static int gaudi2_cn_port_sw_init(struct hbl_cn_port *cn_port)
 
 	hbl_cn_eq_dispatcher_init(gaudi2_port->cn_port);
 
-	mutex_init(&gaudi2_port->cfg_lock);
 	mutex_init(&gaudi2_port->qp_destroy_lock);
 
 	/* Userspace might not be notified immediately of link event from HW.
@@ -5091,11 +5089,11 @@ static void gaudi2_qp_sanity_work(struct work_struct *work)
 
 	gaudi2_port->qp_timeout_cnt = timeout_cnt;
 
-	mutex_lock(&gaudi2_port->cfg_lock);
+	hbl_cn_cfg_lock(cn_port);
 	xa_for_each(&cn_port->qp_ids, qp_id, qp)
 		if (qp && qp->is_req)
 			__qpc_sanity_check(gaudi2_port, qp_id);
-	mutex_unlock(&gaudi2_port->cfg_lock);
+	hbl_cn_cfg_unlock(cn_port);
 
 done:
 	queue_delayed_work(gaudi2_port->qp_sanity_wq, &gaudi2_port->qp_sanity_work,
@@ -5268,29 +5266,6 @@ static void gaudi2_cn_get_status(struct hbl_cn_port *cn_port, struct hbl_cn_cpuc
 
 	status->timeout_retransmission_cnt = timeout_retransmission_cnt;
 	status->high_ber_cnt = high_ber_cnt;
-}
-
-static void gaudi2_cn_cfg_lock(struct hbl_cn_port *cn_port)
-	__acquires(&gaudi2_port->cfg_lock)
-{
-	struct gaudi2_cn_port *gaudi2_port = cn_port->cn_specific;
-
-	mutex_lock(&gaudi2_port->cfg_lock);
-}
-
-static void gaudi2_cn_cfg_unlock(struct hbl_cn_port *cn_port)
-	__releases(&gaudi2_port->cfg_lock)
-{
-	struct gaudi2_cn_port *gaudi2_port = cn_port->cn_specific;
-
-	mutex_unlock(&gaudi2_port->cfg_lock);
-}
-
-static bool gaudi2_cn_cfg_is_locked(struct hbl_cn_port *cn_port)
-{
-	struct gaudi2_cn_port *gaudi2_port = cn_port->cn_specific;
-
-	return mutex_is_locked(&gaudi2_port->cfg_lock);
 }
 
 static u32 gaudi2_cn_get_max_msg_sz(struct hbl_cn_device *hdev)
@@ -5594,9 +5569,6 @@ static struct hbl_cn_asic_port_funcs gaudi2_cn_port_funcs = {
 	.collect_fec_stats = gaudi2_cn_debugfs_collect_fec_stats,
 	.disable_wqe_index_checker = gaudi2_cn_disable_wqe_index_checker,
 	.get_status = gaudi2_cn_get_status,
-	.cfg_lock = gaudi2_cn_cfg_lock,
-	.cfg_unlock = gaudi2_cn_cfg_unlock,
-	.cfg_is_locked = gaudi2_cn_cfg_is_locked,
 	.qp_pre_destroy = gaudi2_cn_qp_pre_destroy,
 	.qp_post_destroy = gaudi2_cn_qp_post_destroy,
 	.set_port_status = gaudi2_cn_set_port_status,
