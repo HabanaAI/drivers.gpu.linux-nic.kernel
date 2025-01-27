@@ -1171,6 +1171,8 @@ struct hbl_cn_port {
 	struct mutex control_lock;
 	/* protects the counters from concurrent reading */
 	struct mutex cnt_lock;
+	/* Serializes the port configuration */
+	struct mutex cfg_lock;
 	struct xarray qp_ids;
 	struct xarray db_fifo_ids;
 	struct xarray cq_ids;
