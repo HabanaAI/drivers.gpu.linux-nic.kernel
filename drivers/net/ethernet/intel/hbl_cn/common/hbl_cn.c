@@ -1667,30 +1667,20 @@ void hbl_cn_hard_reset_prepare(struct hbl_aux_dev *cn_aux_dev, bool fw_reset, bo
 }
 
 void hbl_cn_cfg_lock(struct hbl_cn_port *cn_port)
+	__acquires(&cn_port->cfg_lock)
 {
-	struct hbl_cn_device *hdev = cn_port->hdev;
-	struct hbl_cn_asic_port_funcs *port_funcs;
-
-	port_funcs = hdev->asic_funcs->port_funcs;
-	port_funcs->cfg_lock(cn_port);
+	mutex_lock(&cn_port->cfg_lock);
 }
 
 void hbl_cn_cfg_unlock(struct hbl_cn_port *cn_port)
+	__releases(&cn_port->cfg_lock)
 {
-	struct hbl_cn_device *hdev = cn_port->hdev;
-	struct hbl_cn_asic_port_funcs *port_funcs;
-
-	port_funcs = hdev->asic_funcs->port_funcs;
-	port_funcs->cfg_unlock(cn_port);
+	mutex_unlock(&cn_port->cfg_lock);
 }
 
 bool hbl_cn_cfg_is_locked(struct hbl_cn_port *cn_port)
 {
-	struct hbl_cn_device *hdev = cn_port->hdev;
-	struct hbl_cn_asic_port_funcs *port_funcs;
-
-	port_funcs = hdev->asic_funcs->port_funcs;
-	return port_funcs->cfg_is_locked(cn_port);
+	return mutex_is_locked(&cn_port->cfg_lock);
 }
 
 int hbl_cn_send_port_cpucp_status(struct hbl_aux_dev *aux_dev, u32 port, u8 cmd, u8 period)
@@ -4740,6 +4730,7 @@ static int cn_port_sw_init(struct hbl_cn_port *cn_port)
 
 	mutex_init(&cn_port->control_lock);
 	mutex_init(&cn_port->cnt_lock);
+	mutex_init(&cn_port->cfg_lock);
 
 	xa_init_flags(&cn_port->qp_ids, XA_FLAGS_ALLOC);
 	xa_init_flags(&cn_port->db_fifo_ids, XA_FLAGS_ALLOC);
@@ -4770,6 +4761,7 @@ sw_init_err:
 
 	mutex_destroy(&cn_port->cnt_lock);
 	mutex_destroy(&cn_port->control_lock);
+	mutex_destroy(&cn_port->cfg_lock);
 
 	if (max_qp_error_syndromes)
 		kfree(reset_tracker);
