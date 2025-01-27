@@ -332,8 +332,6 @@ struct gaudi2_cn_port {
 	struct delayed_work eq_work;
 	struct delayed_work qp_sanity_work;
 	struct workqueue_struct *qp_sanity_wq;
-	/* Serializes the port configuration */
-	struct mutex cfg_lock;
 	/* protects the MAC loopback switching for QP destroy flow */
 	struct mutex qp_destroy_lock;
 	ktime_t pcs_link_stady_state_ts;
