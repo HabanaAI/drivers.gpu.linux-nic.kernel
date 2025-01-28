@@ -1171,6 +1171,8 @@ struct hbl_cn_port {
 	struct mutex control_lock;
 	/* protects the counters from concurrent reading */
 	struct mutex cnt_lock;
+	/* Serializes the port configuration */
+	struct mutex cfg_lock;
 	struct xarray qp_ids;
 	struct xarray db_fifo_ids;
 	struct xarray cq_ids;
@@ -1630,6 +1632,8 @@ void hbl_cn_eq_handler(struct hbl_cn_port *cn_port);
 int hbl_cn_alloc_ring(struct hbl_cn_device *hdev, struct hbl_cn_ring *ring, int elem_size,
 		      int count);
 void hbl_cn_free_ring(struct hbl_cn_device *hdev, struct hbl_cn_ring *ring);
+void hbl_cn_cfg_lock(struct hbl_cn_port *cn_port);
+void hbl_cn_cfg_unlock(struct hbl_cn_port *cn_port);
 
 struct hbl_cn_user_cq *hbl_cn_user_cq_get(struct hbl_cn_port *cn_port, u8 cq_id);
 int hbl_cn_user_cq_put(struct hbl_cn_user_cq *user_cq);
