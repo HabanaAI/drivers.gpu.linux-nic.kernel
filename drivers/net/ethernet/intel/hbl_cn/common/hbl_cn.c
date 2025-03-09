@@ -1678,6 +1678,11 @@ void hbl_cn_cfg_unlock(struct hbl_cn_port *cn_port)
 	mutex_unlock(&cn_port->cfg_lock);
 }
 
+bool hbl_cn_cfg_is_locked(struct hbl_cn_port *cn_port)
+{
+       return mutex_is_locked(&cn_port->cfg_lock);
+}
+
 int hbl_cn_send_port_cpucp_status(struct hbl_aux_dev *aux_dev, u32 port, u8 cmd, u8 period)
 {
 	struct hbl_cn_device *hdev = aux_dev->priv;
@@ -1780,6 +1785,9 @@ static int hbl_cn_set_asic_funcs(struct hbl_cn_device *hdev)
 int hbl_cn_dev_init(struct hbl_cn_device *hdev)
 {
 	int rc;
+
+
+	pr_err("TRACE *************************\n");
 
 	if (!hdev->ports_mask) {
 		dev_err(hdev->dev, "All ports are disabled\n");

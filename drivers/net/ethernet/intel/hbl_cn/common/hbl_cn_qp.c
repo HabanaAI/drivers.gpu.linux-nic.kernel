@@ -410,7 +410,7 @@ int hbl_cn_qp_modify(struct hbl_cn_port *cn_port, struct hbl_cn_qp *qp,
 
 	/* only SQD->SQD transition can be executed without holding the configuration lock */
 	if (prev_state != CN_QP_STATE_SQD || new_state != CN_QP_STATE_SQD) {
-		if (!port_funcs->cfg_is_locked(cn_port)) {
+		if (!hbl_cn_cfg_is_locked(cn_port)) {
 			dev_err(hdev->dev,
 				"Configuration lock must be held while moving Port %u QP %u from state %s to %s\n",
 				qp->port, qp->qp_id, cn_qp_state_2name(prev_state),

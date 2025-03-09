@@ -1634,6 +1634,7 @@ int hbl_cn_alloc_ring(struct hbl_cn_device *hdev, struct hbl_cn_ring *ring, int 
 void hbl_cn_free_ring(struct hbl_cn_device *hdev, struct hbl_cn_ring *ring);
 void hbl_cn_cfg_lock(struct hbl_cn_port *cn_port);
 void hbl_cn_cfg_unlock(struct hbl_cn_port *cn_port);
+bool hbl_cn_cfg_is_locked(struct hbl_cn_port *cn_port);
 
 struct hbl_cn_user_cq *hbl_cn_user_cq_get(struct hbl_cn_port *cn_port, u8 cq_id);
 int hbl_cn_user_cq_put(struct hbl_cn_user_cq *user_cq);
