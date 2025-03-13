@@ -516,7 +516,7 @@ static int hbl_cn_update_mtu(struct hbl_aux_dev *aux_dev, u32 port, u32 mtu)
 	port_funcs = hdev->asic_funcs->port_funcs;
 	mtu += HBL_EN_MAX_HEADERS_SZ;
 
-	port_funcs->cfg_lock(cn_port);
+	hbl_cn_cfg_lock(cn_port);
 	xa_for_each(&cn_port->qp_ids, qp_id, qp) {
 		if (qp->mtu_type == MTU_FROM_NETDEV && qp->mtu != mtu) {
 			rc = port_funcs->update_qp_mtu(cn_port, qp, mtu);
@@ -527,7 +527,7 @@ static int hbl_cn_update_mtu(struct hbl_aux_dev *aux_dev, u32 port, u32 mtu)
 			}
 		}
 	}
-	port_funcs->cfg_unlock(cn_port);
+	hbl_cn_cfg_unlock(cn_port);
 
 	return rc;
 }
@@ -543,9 +543,9 @@ static int hbl_cn_qpc_write(struct hbl_aux_dev *aux_dev, u32 port, void *qpc,
 	cn_port = &hdev->cn_ports[port];
 	port_funcs = hdev->asic_funcs->port_funcs;
 
-	port_funcs->cfg_lock(cn_port);
+	hbl_cn_cfg_lock(cn_port);
 	rc = port_funcs->qpc_write(cn_port, qpc, qpc_mask, qpn, is_req);
-	port_funcs->cfg_unlock(cn_port);
+	hbl_cn_cfg_unlock(cn_port);
 
 	return rc;
 }
@@ -895,17 +895,15 @@ static char *hbl_cn_ib_qp_syndrome_to_str(struct hbl_aux_dev *aux_dev, u32 syndr
 
 static int hbl_cn_ib_verify_qp_id(struct hbl_aux_dev *aux_dev, u32 qp_id, u32 port)
 {
-	struct hbl_cn_asic_port_funcs *port_funcs;
 	struct hbl_cn_port *cn_port;
 	struct hbl_cn_device *hdev;
 	struct hbl_cn_qp *qp;
 	int rc = 0;
 
 	hdev = hbl_cn_aux2nic(aux_dev);
-	port_funcs = hdev->asic_funcs->port_funcs;
 	cn_port = &hdev->cn_ports[port];
 
-	port_funcs->cfg_lock(cn_port);
+	hbl_cn_cfg_lock(cn_port);
 	qp = xa_load(&cn_port->qp_ids, qp_id);
 
 	if (IS_ERR_OR_NULL(qp)) {
@@ -923,7 +921,7 @@ static int hbl_cn_ib_verify_qp_id(struct hbl_aux_dev *aux_dev, u32 qp_id, u32 po
 	}
 
 cfg_unlock:
-	port_funcs->cfg_unlock(cn_port);
+	hbl_cn_cfg_unlock(cn_port);
 
 	return rc;
 }
@@ -1668,6 +1666,23 @@ void hbl_cn_hard_reset_prepare(struct hbl_aux_dev *cn_aux_dev, bool fw_reset, bo
 	__hbl_cn_hard_reset_prepare(hdev, fw_reset, in_teardown);
 }
 
+void hbl_cn_cfg_lock(struct hbl_cn_port *cn_port)
+	__acquires(&cn_port->cfg_lock)
+{
+	mutex_lock(&cn_port->cfg_lock);
+}
+
+void hbl_cn_cfg_unlock(struct hbl_cn_port *cn_port)
+	__releases(&cn_port->cfg_lock)
+{
+	mutex_unlock(&cn_port->cfg_lock);
+}
+
+bool hbl_cn_cfg_is_locked(struct hbl_cn_port *cn_port)
+{
+	return mutex_is_locked(&cn_port->cfg_lock);
+}
+
 int hbl_cn_send_port_cpucp_status(struct hbl_aux_dev *aux_dev, u32 port, u8 cmd, u8 period)
 {
 	struct hbl_cn_device *hdev = aux_dev->priv;
@@ -2023,7 +2038,7 @@ static int alloc_qp(struct hbl_cn_device *hdev, struct hbl_cn_ctx *ctx,
 
 	hbl_cn_get_qp_id_range(cn_port, &min_id, &max_id);
 
-	port_funcs->cfg_lock(cn_port);
+	hbl_cn_cfg_lock(cn_port);
 
 	if (!cn_port->set_app_params) {
 		dev_dbg(hdev->dev,
@@ -2065,7 +2080,7 @@ static int alloc_qp(struct hbl_cn_device *hdev, struct hbl_cn_ctx *ctx,
 
 	atomic_inc(&cn_port->num_of_allocated_qps);
 
-	port_funcs->cfg_unlock(cn_port);
+	hbl_cn_cfg_unlock(cn_port);
 
 	out->conn_id = id;
 
@@ -2074,7 +2089,7 @@ static int alloc_qp(struct hbl_cn_device *hdev, struct hbl_cn_ctx *ctx,
 qp_register_error:
 	xa_erase(&qp->cn_port->qp_ids, qp->qp_id);
 error_exit:
-	port_funcs->cfg_unlock(cn_port);
+	hbl_cn_cfg_unlock(cn_port);
 	kfree(qp);
 	return rc;
 }
@@ -2189,8 +2204,6 @@ static int set_req_qp_ctx(struct hbl_cn_device *hdev, struct hbl_cni_req_conn_ct
 {
 	struct hbl_cn_wq_array_properties *swq_arr_props, *rwq_arr_props;
 	struct hbl_cn_encap_xarray_pdata *encap_data;
-	struct hbl_cn_asic_port_funcs *port_funcs;
-	struct hbl_cn_asic_funcs *asic_funcs;
 	u32 wq_size, port, max_wq_size;
 	struct hbl_cn_port *cn_port;
 	struct hbl_cn_qp *qp;
@@ -2211,8 +2224,6 @@ static int set_req_qp_ctx(struct hbl_cn_device *hdev, struct hbl_cni_req_conn_ct
 	if (rc)
 		return rc;
 
-	asic_funcs = hdev->asic_funcs;
-	port_funcs = asic_funcs->port_funcs;
 	cn_port = &hdev->cn_ports[port];
 	wq_size = in->wq_size;
 
@@ -2225,7 +2236,7 @@ static int set_req_qp_ctx(struct hbl_cn_device *hdev, struct hbl_cni_req_conn_ct
 		return -EINVAL;
 	}
 
-	port_funcs->cfg_lock(cn_port);
+	hbl_cn_cfg_lock(cn_port);
 	qp = xa_load(&cn_port->qp_ids, in->conn_id);
 
 	if (IS_ERR_OR_NULL(qp)) {
@@ -2287,7 +2298,7 @@ static int set_req_qp_ctx(struct hbl_cn_device *hdev, struct hbl_cni_req_conn_ct
 	if (rc)
 		goto err_free_rwq;
 
-	port_funcs->cfg_unlock(cn_port);
+	hbl_cn_cfg_unlock(cn_port);
 
 	return 0;
 
@@ -2318,7 +2329,7 @@ err_free_swq:
 		}
 	}
 cfg_unlock:
-	port_funcs->cfg_unlock(cn_port);
+	hbl_cn_cfg_unlock(cn_port);
 
 	return rc;
 }
@@ -2326,8 +2337,6 @@ cfg_unlock:
 static int set_res_qp_ctx(struct hbl_cn_device *hdev, struct hbl_cni_res_conn_ctx_in *in)
 {
 	struct hbl_cn_encap_xarray_pdata *encap_data;
-	struct hbl_cn_asic_port_funcs *port_funcs;
-	struct hbl_cn_asic_funcs *asic_funcs;
 	struct hbl_cn_port *cn_port;
 	struct hbl_cn_qp *qp;
 	u32 port;
@@ -2339,11 +2348,9 @@ static int set_res_qp_ctx(struct hbl_cn_device *hdev, struct hbl_cni_res_conn_ct
 	if (rc)
 		return rc;
 
-	asic_funcs = hdev->asic_funcs;
-	port_funcs = asic_funcs->port_funcs;
 	cn_port = &hdev->cn_ports[port];
 
-	port_funcs->cfg_lock(cn_port);
+	hbl_cn_cfg_lock(cn_port);
 	qp = xa_load(&cn_port->qp_ids, in->conn_id);
 
 	if (IS_ERR_OR_NULL(qp)) {
@@ -2389,12 +2396,12 @@ static int set_res_qp_ctx(struct hbl_cn_device *hdev, struct hbl_cni_res_conn_ct
 	/* all is well, we are ready to receive */
 	rc = hbl_cn_qp_modify(cn_port, qp, CN_QP_STATE_RTR, in);
 
-	port_funcs->cfg_unlock(cn_port);
+	hbl_cn_cfg_unlock(cn_port);
 
 	return rc;
 
 unlock_cfg:
-	port_funcs->cfg_unlock(cn_port);
+	hbl_cn_cfg_unlock(cn_port);
 
 	return rc;
 }
@@ -2443,7 +2450,7 @@ static void qp_destroy_work(struct work_struct *work)
 	if (qp->curr_state == CN_QP_STATE_SQD)
 		hbl_cn_qp_modify(cn_port, qp, CN_QP_STATE_SQD, &drain_attr);
 
-	port_funcs->cfg_lock(cn_port);
+	hbl_cn_cfg_lock(cn_port);
 
 	hbl_cn_qp_modify(cn_port, qp, CN_QP_STATE_RESET, &rst_attr);
 
@@ -2495,7 +2502,7 @@ static void qp_destroy_work(struct work_struct *work)
 	 * Lock is to avoid concurrent memory access from a new handle created before freeing
 	 * memory.
 	 */
-	port_funcs->cfg_unlock(cn_port);
+	hbl_cn_cfg_unlock(cn_port);
 
 	kfree(qp);
 }
@@ -2560,7 +2567,7 @@ static int destroy_qp(struct hbl_cn_device *hdev, struct hbl_cni_destroy_conn_in
 	port_funcs = asic_funcs->port_funcs;
 
 	/* prevent reentrancy by locking the whole process of destroy_qp */
-	port_funcs->cfg_lock(cn_port);
+	hbl_cn_cfg_lock(cn_port);
 	qp = xa_load(&cn_port->qp_ids, in->conn_id);
 
 	if (IS_ERR_OR_NULL(qp)) {
@@ -2570,24 +2577,23 @@ static int destroy_qp(struct hbl_cn_device *hdev, struct hbl_cni_destroy_conn_in
 
 	hbl_cn_qp_do_release(qp);
 
-	port_funcs->cfg_unlock(cn_port);
+	hbl_cn_cfg_unlock(cn_port);
 
 	return 0;
 
 out_err:
-	port_funcs->cfg_unlock(cn_port);
+	hbl_cn_cfg_unlock(cn_port);
 
 	return rc;
 }
 
 static void hbl_cn_qps_stop(struct hbl_cn_port *cn_port)
 {
-	struct hbl_cn_asic_port_funcs *port_funcs = cn_port->hdev->asic_funcs->port_funcs;
 	struct hbl_cn_qpc_drain_attr drain = { .wait_for_idle = false, };
 	unsigned long qp_id = 0;
 	struct hbl_cn_qp *qp;
 
-	port_funcs->cfg_lock(cn_port);
+	hbl_cn_cfg_lock(cn_port);
 
 	xa_for_each(&cn_port->qp_ids, qp_id, qp) {
 		if (IS_ERR_OR_NULL(qp))
@@ -2596,7 +2602,7 @@ static void hbl_cn_qps_stop(struct hbl_cn_port *cn_port)
 		hbl_cn_qp_modify(cn_port, qp, CN_QP_STATE_QPD, (void *)&drain);
 	}
 
-	port_funcs->cfg_unlock(cn_port);
+	hbl_cn_cfg_unlock(cn_port);
 }
 
 static void qps_stop(struct hbl_cn_device *hdev)
@@ -2696,7 +2702,7 @@ static int user_wq_arr_set(struct hbl_cn_device *hdev, struct hbl_cni_user_wq_ar
 		return -EINVAL;
 	}
 
-	port_funcs->cfg_lock(cn_port);
+	hbl_cn_cfg_lock(cn_port);
 
 	if (!cn_port->set_app_params) {
 		dev_dbg(hdev->dev,
@@ -2761,7 +2767,7 @@ static int user_wq_arr_set(struct hbl_cn_device *hdev, struct hbl_cni_user_wq_ar
 	wq_arr_props->enabled = true;
 
 out:
-	port_funcs->cfg_unlock(cn_port);
+	hbl_cn_cfg_unlock(cn_port);
 
 	return rc;
 }
@@ -2800,14 +2806,12 @@ static int user_wq_arr_unset(struct hbl_cn_device *hdev, struct hbl_cni_user_wq_
 			     struct hbl_cn_ctx *ctx)
 {
 	struct hbl_cn_wq_array_properties *wq_arr_props;
-	struct hbl_cn_asic_port_funcs *port_funcs;
 	struct hbl_cn_properties *cn_props;
 	struct hbl_cn_port *cn_port;
 	u32 port, type;
 	char *type_str;
 	int rc;
 
-	port_funcs = hdev->asic_funcs->port_funcs;
 	cn_props = &hdev->cn_props;
 
 	type = in->type;
@@ -2832,7 +2836,7 @@ static int user_wq_arr_unset(struct hbl_cn_device *hdev, struct hbl_cni_user_wq_
 	wq_arr_props = &cn_port->wq_arr_props[type];
 	type_str = wq_arr_props->type_str;
 
-	port_funcs->cfg_lock(cn_port);
+	hbl_cn_cfg_lock(cn_port);
 
 	if (!wq_arr_props->enabled) {
 		dev_dbg(hdev->dev, "%s WQ array is disabled, port %d\n", type_str, port);
@@ -2855,7 +2859,7 @@ static int user_wq_arr_unset(struct hbl_cn_device *hdev, struct hbl_cni_user_wq_
 
 	rc = __user_wq_arr_unset(ctx, cn_port, type);
 out:
-	port_funcs->cfg_unlock(cn_port);
+	hbl_cn_cfg_unlock(cn_port);
 
 	return rc;
 }
@@ -2894,7 +2898,7 @@ static int alloc_user_cq_id(struct hbl_cn_device *hdev, struct hbl_cni_alloc_use
 
 	port_funcs->get_cq_id_range(cn_port, &min_id, &max_id);
 
-	port_funcs->cfg_lock(cn_port);
+	hbl_cn_cfg_lock(cn_port);
 
 	if (!cn_port->set_app_params) {
 		dev_dbg(hdev->dev,
@@ -2915,7 +2919,7 @@ static int alloc_user_cq_id(struct hbl_cn_device *hdev, struct hbl_cni_alloc_use
 
 	mutex_init(&user_cq->overrun_lock);
 
-	port_funcs->cfg_unlock(cn_port);
+	hbl_cn_cfg_unlock(cn_port);
 
 	dev_dbg(hdev->dev, "Allocating CQ id %d in port %d", id, port);
 
@@ -2924,7 +2928,7 @@ static int alloc_user_cq_id(struct hbl_cn_device *hdev, struct hbl_cni_alloc_use
 	return 0;
 
 cfg_unlock:
-	port_funcs->cfg_unlock(cn_port);
+	hbl_cn_cfg_unlock(cn_port);
 	kfree(user_cq);
 
 	return rc;
@@ -2992,7 +2996,7 @@ static int __user_cq_set(struct hbl_cn_device *hdev, struct hbl_cni_user_cq_set_
 		return -EINVAL;
 	}
 
-	port_funcs->cfg_lock(cn_port);
+	hbl_cn_cfg_lock(cn_port);
 
 	/* Validate if user CQ is allocated. */
 	user_cq = xa_load(&cn_port->cq_ids, id);
@@ -3018,7 +3022,7 @@ static int __user_cq_set(struct hbl_cn_device *hdev, struct hbl_cni_user_cq_set_
 
 	user_cq->state = USER_CQ_STATE_SET;
 out:
-	port_funcs->cfg_unlock(cn_port);
+	hbl_cn_cfg_unlock(cn_port);
 
 	return rc;
 }
@@ -3118,7 +3122,6 @@ static int user_cq_unset_locked(struct hbl_cn_user_cq *user_cq, bool warn_if_ali
 
 static int __user_cq_unset(struct hbl_cn_device *hdev, struct hbl_cni_user_cq_unset_in_params *in)
 {
-	struct hbl_cn_asic_port_funcs *port_funcs = hdev->asic_funcs->port_funcs;
 	struct hbl_cn_properties *cn_props = &hdev->cn_props;
 	struct hbl_cn_user_cq *user_cq;
 	struct hbl_cn_port *cn_port;
@@ -3152,7 +3155,7 @@ static int __user_cq_unset(struct hbl_cn_device *hdev, struct hbl_cni_user_cq_un
 		return -EINVAL;
 	}
 
-	port_funcs->cfg_lock(cn_port);
+	hbl_cn_cfg_lock(cn_port);
 
 	/* Validate if user CQ is allocated. */
 	user_cq = xa_load(&cn_port->cq_ids, id);
@@ -3164,7 +3167,7 @@ static int __user_cq_unset(struct hbl_cn_device *hdev, struct hbl_cni_user_cq_un
 
 	rc = user_cq_unset_locked(user_cq, false);
 out:
-	port_funcs->cfg_unlock(cn_port);
+	hbl_cn_cfg_unlock(cn_port);
 
 	return rc;
 }
@@ -3205,7 +3208,7 @@ static int user_set_app_params(struct hbl_cn_device *hdev,
 	 * will first obtain rtnl_lock and then will try to take a cfg_lock, hence a deadlock.
 	 */
 	rtnl_lock();
-	port_funcs->cfg_lock(cn_port);
+	hbl_cn_cfg_lock(cn_port);
 
 	rc = asic_funcs->user_set_app_params(hdev, in, &modify_wqe_checkers, ctx);
 	if (rc)
@@ -3223,7 +3226,7 @@ static int user_set_app_params(struct hbl_cn_device *hdev,
 	cn_port->set_app_params = true;
 
 out:
-	port_funcs->cfg_unlock(cn_port);
+	hbl_cn_cfg_unlock(cn_port);
 	rtnl_unlock();
 
 	return rc;
@@ -3234,12 +3237,9 @@ static int user_get_app_params(struct hbl_cn_device *hdev,
 			       struct hbl_cni_get_user_app_params_out *out)
 {
 	struct hbl_cn_asic_funcs *asic_funcs = hdev->asic_funcs;
-	struct hbl_cn_asic_port_funcs *port_funcs;
 	struct hbl_cn_port *cn_port;
 	u32 port;
 	int rc;
-
-	port_funcs = asic_funcs->port_funcs;
 
 	port = in->port;
 
@@ -3249,9 +3249,9 @@ static int user_get_app_params(struct hbl_cn_device *hdev,
 
 	cn_port = &hdev->cn_ports[port];
 
-	port_funcs->cfg_lock(cn_port);
+	hbl_cn_cfg_lock(cn_port);
 	asic_funcs->user_get_app_params(hdev, in, out);
-	port_funcs->cfg_unlock(cn_port);
+	hbl_cn_cfg_unlock(cn_port);
 
 	return 0;
 }
@@ -3322,7 +3322,6 @@ static int alloc_user_db_fifo(struct hbl_cn_device *hdev, struct hbl_cn_ctx *ctx
 			      struct hbl_cni_alloc_user_db_fifo_out *out)
 {
 	struct hbl_cn_db_fifo_xarray_pdata *xa_pdata;
-	struct hbl_cn_asic_port_funcs *port_funcs;
 	struct hbl_cn_port *cn_port;
 	struct xa_limit id_limit;
 	u32 min_id, max_id;
@@ -3335,7 +3334,6 @@ static int alloc_user_db_fifo(struct hbl_cn_device *hdev, struct hbl_cn_ctx *ctx
 		return rc;
 
 	cn_port = &hdev->cn_ports[port];
-	port_funcs = hdev->asic_funcs->port_funcs;
 
 	get_user_db_fifo_id_range(cn_port, &min_id, &max_id, in->id_hint);
 
@@ -3348,7 +3346,7 @@ static int alloc_user_db_fifo(struct hbl_cn_device *hdev, struct hbl_cn_ctx *ctx
 	xa_pdata->state = DB_FIFO_STATE_ALLOC;
 	xa_pdata->port = port;
 
-	port_funcs->cfg_lock(cn_port);
+	hbl_cn_cfg_lock(cn_port);
 
 	if (!cn_port->set_app_params) {
 		dev_dbg(hdev->dev,
@@ -3367,14 +3365,14 @@ static int alloc_user_db_fifo(struct hbl_cn_device *hdev, struct hbl_cn_ctx *ctx
 
 	xa_pdata->id = id;
 
-	port_funcs->cfg_unlock(cn_port);
+	hbl_cn_cfg_unlock(cn_port);
 
 	out->id = id;
 
 	return 0;
 
 cfg_unlock:
-	port_funcs->cfg_unlock(cn_port);
+	hbl_cn_cfg_unlock(cn_port);
 	kfree(xa_pdata);
 	return rc;
 }
@@ -3480,7 +3478,7 @@ static int user_db_fifo_set(struct hbl_cn_device *hdev, struct hbl_cn_ctx *ctx,
 	/* Get allocated ID private data. Having meta data associated with IDR also helps validate
 	 * that user do not trick kernel into configuring db fifo HW for an unallocated ID.
 	 */
-	port_funcs->cfg_lock(cn_port);
+	hbl_cn_cfg_lock(cn_port);
 	xa_pdata = xa_load(&cn_port->db_fifo_ids, id);
 	if (!xa_pdata) {
 		dev_dbg_ratelimited(hdev->dev, "DB FIFO ID %d is not allocated, port: %d\n", id,
@@ -3566,7 +3564,7 @@ static int user_db_fifo_set(struct hbl_cn_device *hdev, struct hbl_cn_ctx *ctx,
 	out->fifo_size = xa_pdata->fifo_size;
 	out->fifo_bp_thresh = xa_pdata->fifo_size / 2;
 
-	port_funcs->cfg_unlock(cn_port);
+	hbl_cn_cfg_unlock(cn_port);
 
 	return 0;
 
@@ -3576,7 +3574,7 @@ free_ci:
 free_db_fifo:
 	port_funcs->db_fifo_free(cn_port, xa_pdata->db_pool_addr, xa_pdata->fifo_size);
 cfg_unlock:
-	port_funcs->cfg_unlock(cn_port);
+	hbl_cn_cfg_unlock(cn_port);
 
 	return rc;
 }
@@ -3605,7 +3603,6 @@ static int __user_db_fifo_unset(struct hbl_cn_port *cn_port,
 static int user_db_fifo_unset(struct hbl_cn_device *hdev, struct hbl_cni_user_db_fifo_unset_in *in)
 {
 	struct hbl_cn_db_fifo_xarray_pdata *xa_pdata;
-	struct hbl_cn_asic_port_funcs *port_funcs;
 	struct hbl_cn_port *cn_port;
 	int rc;
 	u32 id;
@@ -3615,14 +3612,13 @@ static int user_db_fifo_unset(struct hbl_cn_device *hdev, struct hbl_cni_user_db
 		return rc;
 
 	cn_port = &hdev->cn_ports[in->port];
-	port_funcs = hdev->asic_funcs->port_funcs;
 	id = in->id;
 
 	rc = validate_db_fifo_ioctl(cn_port, id);
 	if (rc)
 		return rc;
 
-	port_funcs->cfg_lock(cn_port);
+	hbl_cn_cfg_lock(cn_port);
 
 	xa_pdata = xa_load(&cn_port->db_fifo_ids, id);
 	if (!xa_pdata) {
@@ -3634,7 +3630,7 @@ static int user_db_fifo_unset(struct hbl_cn_device *hdev, struct hbl_cni_user_db
 
 	rc = __user_db_fifo_unset(cn_port, xa_pdata);
 out:
-	port_funcs->cfg_unlock(cn_port);
+	hbl_cn_cfg_unlock(cn_port);
 
 	return rc;
 }
@@ -3667,7 +3663,7 @@ static int user_encap_alloc(struct hbl_cn_device *hdev, struct hbl_cni_user_enca
 
 	xa_pdata->port = port;
 
-	port_funcs->cfg_lock(cn_port);
+	hbl_cn_cfg_lock(cn_port);
 
 	if (!cn_port->set_app_params) {
 		dev_dbg(hdev->dev,
@@ -3686,14 +3682,14 @@ static int user_encap_alloc(struct hbl_cn_device *hdev, struct hbl_cni_user_enca
 	}
 
 	xa_pdata->id = id;
-	port_funcs->cfg_unlock(cn_port);
+	hbl_cn_cfg_unlock(cn_port);
 
 	out->id = id;
 
 	return 0;
 
 cfg_unlock:
-	port_funcs->cfg_unlock(cn_port);
+	hbl_cn_cfg_unlock(cn_port);
 	kfree(xa_pdata);
 
 	return rc;
@@ -3773,7 +3769,7 @@ static int user_encap_set(struct hbl_cn_device *hdev, struct hbl_cni_user_encap_
 		return -EINVAL;
 	}
 
-	port_funcs->cfg_lock(cn_port);
+	hbl_cn_cfg_lock(cn_port);
 
 	xa_pdata = xa_load(&cn_port->encap_ids, id);
 	if (!xa_pdata) {
@@ -3829,7 +3825,7 @@ static int user_encap_set(struct hbl_cn_device *hdev, struct hbl_cni_user_encap_
 	if (rc)
 		goto free_header;
 
-	port_funcs->cfg_unlock(cn_port);
+	hbl_cn_cfg_unlock(cn_port);
 
 	return 0;
 
@@ -3837,7 +3833,7 @@ free_header:
 	if (in->encap_type != HBL_CNI_ENCAP_NONE)
 		kfree(encap_header);
 cfg_unlock:
-	port_funcs->cfg_unlock(cn_port);
+	hbl_cn_cfg_unlock(cn_port);
 
 	return rc;
 }
@@ -3862,7 +3858,7 @@ static int user_encap_unset(struct hbl_cn_device *hdev, struct hbl_cni_user_enca
 	if (rc)
 		return rc;
 
-	port_funcs->cfg_lock(cn_port);
+	hbl_cn_cfg_lock(cn_port);
 
 	xa_pdata = xa_load(&cn_port->encap_ids, id);
 	if (!xa_pdata) {
@@ -3882,7 +3878,7 @@ static int user_encap_unset(struct hbl_cn_device *hdev, struct hbl_cni_user_enca
 	kfree(xa_pdata);
 
 out:
-	port_funcs->cfg_unlock(cn_port);
+	hbl_cn_cfg_unlock(cn_port);
 
 	return rc;
 }
@@ -3918,7 +3914,7 @@ static int user_ccq_set(struct hbl_cn_device *hdev, struct hbl_cni_user_ccq_set_
 
 	cn_port = &hdev->cn_ports[port];
 
-	port_funcs->cfg_lock(cn_port);
+	hbl_cn_cfg_lock(cn_port);
 
 	if (!cn_port->set_app_params) {
 		dev_dbg(hdev->dev,
@@ -3979,7 +3975,7 @@ static int user_ccq_set(struct hbl_cn_device *hdev, struct hbl_cni_user_ccq_set_
 
 	cn_port->ccq_enable = true;
 
-	port_funcs->cfg_unlock(cn_port);
+	hbl_cn_cfg_unlock(cn_port);
 
 	return 0;
 
@@ -3988,7 +3984,7 @@ free_pi:
 free_ccq:
 	hbl_cn_mem_destroy(hdev, ccq_mmap_handle);
 cfg_unlock:
-	port_funcs->cfg_unlock(cn_port);
+	hbl_cn_cfg_unlock(cn_port);
 
 	return rc;
 }
@@ -4036,7 +4032,6 @@ static int __user_ccq_unset(struct hbl_cn_device *hdev, struct hbl_cn_ctx *ctx, 
 static int user_ccq_unset(struct hbl_cn_device *hdev, struct hbl_cni_user_ccq_unset_in *in,
 			  struct hbl_cn_ctx *ctx)
 {
-	struct hbl_cn_asic_port_funcs *port_funcs = hdev->asic_funcs->port_funcs;
 	struct hbl_cn_port *cn_port;
 	u32 port;
 	int rc;
@@ -4049,7 +4044,7 @@ static int user_ccq_unset(struct hbl_cn_device *hdev, struct hbl_cni_user_ccq_un
 
 	cn_port = &hdev->cn_ports[port];
 
-	port_funcs->cfg_lock(cn_port);
+	hbl_cn_cfg_lock(cn_port);
 
 	if (!cn_port->ccq_enable) {
 		dev_dbg(hdev->dev, "Failed unsetting CCQ handler - it is already unset, port %u\n",
@@ -4060,7 +4055,7 @@ static int user_ccq_unset(struct hbl_cn_device *hdev, struct hbl_cni_user_ccq_un
 
 	rc = __user_ccq_unset(hdev, ctx, in->port);
 out:
-	port_funcs->cfg_unlock(cn_port);
+	hbl_cn_cfg_unlock(cn_port);
 
 	return rc;
 }
@@ -4268,7 +4263,6 @@ static int hbl_cn_ib_query_mem_handle(struct hbl_aux_dev *ib_aux_dev, u64 mem_ha
 
 static void qps_destroy(struct hbl_cn_device *hdev)
 {
-	struct hbl_cn_asic_port_funcs *port_funcs = hdev->asic_funcs->port_funcs;
 	struct hbl_cn_port *cn_port;
 	unsigned long qp_id = 0;
 	struct hbl_cn_qp *qp;
@@ -4282,7 +4276,7 @@ static void qps_destroy(struct hbl_cn_device *hdev)
 		cn_port = &hdev->cn_ports[i];
 
 		/* protect against destroy_qp occurring in parallel */
-		port_funcs->cfg_lock(cn_port);
+		hbl_cn_cfg_lock(cn_port);
 
 		xa_for_each(&cn_port->qp_ids, qp_id, qp) {
 			if (IS_ERR_OR_NULL(qp))
@@ -4291,7 +4285,7 @@ static void qps_destroy(struct hbl_cn_device *hdev)
 			hbl_cn_qp_do_release(qp);
 		}
 
-		port_funcs->cfg_unlock(cn_port);
+		hbl_cn_cfg_unlock(cn_port);
 	}
 
 	/* wait for the workers to complete */
@@ -4304,13 +4298,13 @@ static void qps_destroy(struct hbl_cn_device *hdev)
 
 		cn_port = &hdev->cn_ports[i];
 
-		port_funcs->cfg_lock(cn_port);
+		hbl_cn_cfg_lock(cn_port);
 
 		xa_for_each(&cn_port->qp_ids, qp_id, qp)
 			dev_err_ratelimited(hdev->dev, "Port %d QP %ld is still alive\n",
 					    cn_port->port, qp_id);
 
-		port_funcs->cfg_unlock(cn_port);
+		hbl_cn_cfg_unlock(cn_port);
 	}
 }
 
@@ -4382,14 +4376,12 @@ static void ccqs_destroy(struct hbl_cn_ctx *ctx)
 static void user_db_fifos_destroy(struct hbl_cn_ctx *ctx)
 {
 	struct hbl_cn_db_fifo_xarray_pdata *xa_pdata;
-	struct hbl_cn_asic_port_funcs *port_funcs;
 	struct hbl_cn_port *cn_port;
 	struct hbl_cn_device *hdev;
 	unsigned long id;
 	int i;
 
 	hdev = ctx->hdev;
-	port_funcs = hdev->asic_funcs->port_funcs;
 
 	for (i = 0; i < hdev->cn_props.max_num_of_ports; i++) {
 		if (!(hdev->ports_mask & BIT(i)))
@@ -4397,19 +4389,18 @@ static void user_db_fifos_destroy(struct hbl_cn_ctx *ctx)
 
 		cn_port = &hdev->cn_ports[i];
 
-		port_funcs->cfg_lock(cn_port);
+		hbl_cn_cfg_lock(cn_port);
 
 		xa_for_each(&cn_port->db_fifo_ids, id, xa_pdata)
 			if (xa_pdata->asid == ctx->asid)
 				__user_db_fifo_unset(cn_port, xa_pdata);
 
-		port_funcs->cfg_unlock(cn_port);
+		hbl_cn_cfg_unlock(cn_port);
 	}
 }
 
 static void encap_ids_destroy(struct hbl_cn_device *hdev)
 {
-	struct hbl_cn_asic_port_funcs *port_funcs = hdev->asic_funcs->port_funcs;
 	struct hbl_cn_asic_funcs *asic_funcs = hdev->asic_funcs;
 	struct hbl_cn_encap_xarray_pdata *xa_pdata;
 	struct hbl_cn_port *cn_port;
@@ -4422,7 +4413,7 @@ static void encap_ids_destroy(struct hbl_cn_device *hdev)
 
 		cn_port = &hdev->cn_ports[i];
 
-		port_funcs->cfg_lock(cn_port);
+		hbl_cn_cfg_lock(cn_port);
 
 		xa_for_each(&cn_port->encap_ids, encap_id, xa_pdata) {
 			asic_funcs->port_funcs->encap_unset(cn_port, encap_id, xa_pdata);
@@ -4434,7 +4425,7 @@ static void encap_ids_destroy(struct hbl_cn_device *hdev)
 			xa_erase(&cn_port->encap_ids, encap_id);
 		}
 
-		port_funcs->cfg_unlock(cn_port);
+		hbl_cn_cfg_unlock(cn_port);
 	}
 }
 
@@ -4739,6 +4730,7 @@ static int cn_port_sw_init(struct hbl_cn_port *cn_port)
 
 	mutex_init(&cn_port->control_lock);
 	mutex_init(&cn_port->cnt_lock);
+	mutex_init(&cn_port->cfg_lock);
 
 	xa_init_flags(&cn_port->qp_ids, XA_FLAGS_ALLOC);
 	xa_init_flags(&cn_port->db_fifo_ids, XA_FLAGS_ALLOC);
@@ -4767,6 +4759,7 @@ sw_init_err:
 	xa_destroy(&cn_port->db_fifo_ids);
 	xa_destroy(&cn_port->qp_ids);
 
+	mutex_destroy(&cn_port->cfg_lock);
 	mutex_destroy(&cn_port->cnt_lock);
 	mutex_destroy(&cn_port->control_lock);
 
